@@ -86,17 +86,18 @@ const MessageAttachment = ({ fileUrl, fileName, fileSize, fileType }: MessageAtt
   return (
     <div className="mt-2 max-w-xs">
       {fileCategory === 'image' && (
-        <div className="relative group">
+        <div className="relative group rounded-lg overflow-hidden shadow-md hover:shadow-lg transition-shadow">
           <img
             src={signedUrl}
             alt={fileName}
-            className="rounded-lg max-h-64 cursor-pointer hover:opacity-90 transition-opacity"
+            className="max-h-80 w-full object-cover cursor-pointer hover:scale-105 transition-transform duration-300"
             onClick={() => window.open(signedUrl, "_blank")}
           />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
           <Button
             size="icon"
             variant="secondary"
-            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
             onClick={handleDownload}
           >
             <Download className="h-4 w-4" />
@@ -105,16 +106,16 @@ const MessageAttachment = ({ fileUrl, fileName, fileSize, fileType }: MessageAtt
       )}
 
       {fileCategory === 'video' && (
-        <div className="relative group">
+        <div className="relative group rounded-lg overflow-hidden shadow-md hover:shadow-lg transition-shadow">
           <video
             src={signedUrl}
             controls
-            className="rounded-lg max-h-64 w-full"
+            className="max-h-80 w-full rounded-lg"
           />
           <Button
             size="icon"
             variant="secondary"
-            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
             onClick={handleDownload}
           >
             <Download className="h-4 w-4" />
