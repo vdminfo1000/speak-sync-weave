@@ -19,7 +19,7 @@ import VideoCall from "@/components/VideoCall";
 import AudioCall from "@/components/AudioCall";
 import CallHistory from "@/components/CallHistory";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { NavMenu } from "@/components/NavMenu";
+import SwipeablePanel from "@/components/SwipeablePanel";
 
 const Messenger = () => {
   const navigate = useNavigate();
@@ -295,30 +295,30 @@ const Messenger = () => {
   };
 
   return (
-    <div className="flex h-screen bg-background w-full">
-      <div className="w-80 border-r border-border flex flex-col bg-card">
-        <div className="p-4 border-b border-border flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Shield className="w-6 h-6 text-primary" />
-            <h1 className="text-xl font-bold">GoodOK</h1>
+    <SwipeablePanel
+      onOpenChatRequests={() => setIsRequestsOpen(true)}
+      onOpenCreateGroup={() => setIsCreateGroupOpen(true)}
+      onOpenCallHistory={() => setIsCallHistoryOpen(true)}
+      pendingRequestsCount={pendingRequestsCount}
+      missedCallsCount={missedCallsCount}
+    >
+      <div className="flex h-screen bg-background w-full">
+        <div className="w-80 border-r border-border flex flex-col bg-card">
+          <div className="p-4 border-b border-border flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Shield className="w-6 h-6 text-primary" />
+              <h1 className="text-xl font-bold">GoodOK</h1>
+            </div>
+            <div className="flex items-center gap-1">
+              <Button variant="ghost" size="icon" onClick={() => navigate("/profile")}>
+                <User className="w-5 h-5" />
+              </Button>
+              <ThemeToggle />
+              <Button variant="ghost" size="icon" onClick={handleLogout}>
+                <LogOut className="w-5 h-5" />
+              </Button>
+            </div>
           </div>
-          <div className="flex items-center gap-1">
-            <Button variant="ghost" size="icon" onClick={() => navigate("/profile")}>
-              <User className="w-5 h-5" />
-            </Button>
-            <NavMenu
-              onOpenChatRequests={() => setIsRequestsOpen(true)}
-              onOpenCreateGroup={() => setIsCreateGroupOpen(true)}
-              onOpenCallHistory={() => setIsCallHistoryOpen(true)}
-              pendingRequestsCount={pendingRequestsCount}
-              missedCallsCount={missedCallsCount}
-            />
-            <ThemeToggle />
-            <Button variant="ghost" size="icon" onClick={handleLogout}>
-              <LogOut className="w-5 h-5" />
-            </Button>
-          </div>
-        </div>
 
         <div className="p-4 space-y-2">
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -477,7 +477,8 @@ const Messenger = () => {
           isInitiator={activeCall.isInitiator}
         />
       )}
-    </div>
+      </div>
+    </SwipeablePanel>
   );
 };
 
