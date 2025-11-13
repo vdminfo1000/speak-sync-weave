@@ -3,10 +3,10 @@ import { Check, CheckCheck } from "lucide-react";
 interface MessageStatusProps {
   isOwn: boolean;
   isRead: boolean;
-  isDelivered?: boolean;
+  isDelivered: boolean;
 }
 
-const MessageStatus = ({ isOwn, isRead, isDelivered = true }: MessageStatusProps) => {
+const MessageStatus = ({ isOwn, isRead, isDelivered }: MessageStatusProps) => {
   if (!isOwn) return null;
 
   return (

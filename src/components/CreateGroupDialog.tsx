@@ -120,7 +120,8 @@ const CreateGroupDialog = ({
       return;
     }
 
-    if (selectedContacts.size === 0) {
+    // Для каналов участники не обязательны
+    if (chatType === "group" && selectedContacts.size === 0) {
       toast.error("Выберите хотя бы одного участника");
       return;
     }
@@ -138,8 +139,9 @@ const CreateGroupDialog = ({
         .from("chats")
         .insert({
           name: groupName,
-          is_group: true,
+          is_group: chatType === "group",
           chat_type: chatType,
+          is_public: chatType === "channel",
         })
         .select()
         .single();
@@ -232,7 +234,7 @@ const CreateGroupDialog = ({
           </div>
 
           <div className="space-y-2">
-            <Label>Участники</Label>
+            <Label>Участники {chatType === "channel" && "(необязательно)"}</Label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input

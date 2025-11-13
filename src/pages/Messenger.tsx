@@ -19,6 +19,7 @@ import VideoCall from "@/components/VideoCall";
 import AudioCall from "@/components/AudioCall";
 import CallHistory from "@/components/CallHistory";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import PublicChannelsList from "@/components/PublicChannelsList";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 const Messenger = () => {
@@ -29,6 +30,7 @@ const Messenger = () => {
   const [isRequestsOpen, setIsRequestsOpen] = useState(false);
   const [isCallHistoryOpen, setIsCallHistoryOpen] = useState(false);
   const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
+  const [isPublicChannelsOpen, setIsPublicChannelsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string>("");
   const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
@@ -343,6 +345,15 @@ const Messenger = () => {
             Создать группу/канал
           </Button>
 
+          <Button 
+            variant="outline" 
+            className="w-full" 
+            onClick={() => setIsPublicChannelsOpen(true)}
+          >
+            <MessageCircle className="w-4 h-4 mr-2" />
+            Публичные каналы
+          </Button>
+
           <Dialog open={isRequestsOpen} onOpenChange={setIsRequestsOpen}>
             <DialogTrigger asChild>
               <Button variant="outline" className="w-full relative">
@@ -440,6 +451,16 @@ const Messenger = () => {
         onGroupCreated={(chatId) => {
           setSelectedChatId(chatId);
           setIsCreateGroupOpen(false);
+        }}
+      />
+
+      {/* Public channels dialog */}
+      <PublicChannelsList
+        open={isPublicChannelsOpen}
+        onOpenChange={setIsPublicChannelsOpen}
+        onChannelJoin={(channelId) => {
+          setSelectedChatId(channelId);
+          setIsPublicChannelsOpen(false);
         }}
       />
 
