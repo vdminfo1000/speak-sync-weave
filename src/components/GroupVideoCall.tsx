@@ -6,6 +6,7 @@ import { Phone, PhoneOff, Mic, MicOff, Video as VideoIcon, VideoOff, UserPlus } 
 import { toast } from "sonner";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import InviteToGroupCallDialog from "./InviteToGroupCallDialog";
 
 interface Participant {
   userId: string;
@@ -38,6 +39,7 @@ const GroupVideoCall = ({
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [callDuration, setCallDuration] = useState(0);
+  const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());

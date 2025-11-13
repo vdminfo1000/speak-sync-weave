@@ -18,7 +18,7 @@ import IncomingCallNotification from "@/components/IncomingCallNotification";
 import VideoCall from "@/components/VideoCall";
 import AudioCall from "@/components/AudioCall";
 import CallHistory from "@/components/CallHistory";
-import SwipeablePanel from "@/components/SwipeablePanel";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const Messenger = () => {
   const navigate = useNavigate();
@@ -294,8 +294,7 @@ const Messenger = () => {
   };
 
   return (
-    <SwipeablePanel>
-      <div className="flex h-screen bg-background w-full">
+    <div className="flex h-screen bg-background w-full">
       <div className="w-80 border-r border-border flex flex-col bg-card">
         <div className="p-4 border-b border-border flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -303,6 +302,7 @@ const Messenger = () => {
             <h1 className="text-xl font-bold">GoodOK</h1>
           </div>
           <div className="flex items-center gap-1">
+            <ThemeToggle />
             <Button variant="ghost" size="icon" onClick={() => navigate("/profile")}>
               <User className="w-5 h-5" />
             </Button>
@@ -469,8 +469,7 @@ const Messenger = () => {
           isInitiator={activeCall.isInitiator}
         />
       )}
-      </div>
-    </SwipeablePanel>
+    </div>
   );
 };
 
