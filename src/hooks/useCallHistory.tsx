@@ -12,47 +12,6 @@ interface CallHistoryEntry {
 }
 
 export const useCallHistory = (currentUserId: string) => {
-  const [missedCallsCount, setMissedCallsCount] = useState(0);
-
-  useEffect(() => {
-    loadMissedCallsCount();
-
-    const channel = supabase
-      .channel("call-history-changes")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "call_history",
-          filter: `receiver_id=eq.${currentUserId}`,
-        },
-        () => {
-          loadMissedCallsCount();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [currentUserId]);
-
-  const loadMissedCallsCount = async () => {
-    try {
-      const { count, error } = await supabase
-        .from("call_history")
-        .select("*", { count: "exact", head: true })
-        .eq("receiver_id", currentUserId)
-        .in("status", ["missed", "no-answer"])
-        .gte("started_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString());
-
-      if (error) throw error;
-      setMissedCallsCount(count || 0);
-    } catch (error) {
-      console.error("Error loading missed calls count:", error);
-    }
-  };
 
   const recordCall = async (entry: CallHistoryEntry) => {
     try {
@@ -98,7 +57,6 @@ export const useCallHistory = (currentUserId: string) => {
   };
 
   return {
-    missedCallsCount,
     recordCall,
     updateCallStatus,
   };
