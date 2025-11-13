@@ -9,7 +9,7 @@ import { ru } from "date-fns/locale";
 import { toast } from "sonner";
 import { z } from "zod";
 import { getUserFriendlyError } from "@/lib/errorHandler";
-import { isUserOnline } from "@/utils/userStatus";
+import { isUserOnline, getLastSeenText } from "@/utils/userStatus";
 import FileUpload from "./FileUpload";
 import MessageActions from "./MessageActions";
 import MessageAttachment from "./MessageAttachment";
@@ -96,6 +96,7 @@ const ChatWindow = ({ chatId, onStartCall }: ChatWindowProps) => {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [chatName, setChatName] = useState<string | null>(null);
   const [otherUserId, setOtherUserId] = useState<string | null>(null);
+  const [otherUserAvatar, setOtherUserAvatar] = useState<string | null>(null);
   const [otherUserStatus, setOtherUserStatus] = useState<{status: string | null, lastSeen: string | null}>({status: null, lastSeen: null});
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
@@ -241,12 +242,13 @@ const ChatWindow = ({ chatId, onStartCall }: ChatWindowProps) => {
             setOtherUserId(members.user_id);
             const { data: profile } = await (supabase as any)
               .from("profiles")
-              .select("username, full_name, status, last_seen")
+              .select("username, full_name, avatar_url, status, last_seen")
               .eq("id", members.user_id)
               .single();
 
             if (profile) {
               setChatName(profile.full_name || profile.username || "Неизвестный");
+              setOtherUserAvatar(profile.avatar_url);
               setOtherUserStatus({
                 status: profile.status,
                 lastSeen: profile.last_seen
@@ -593,13 +595,24 @@ const ChatWindow = ({ chatId, onStartCall }: ChatWindowProps) => {
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between p-4 border-b border-border bg-card">
         <div className="flex items-center gap-3">
-          <Avatar>
-            <AvatarFallback className="bg-primary/10 text-primary">
-              {(chatName && chatName.charAt(0).toUpperCase()) || "?"}
-            </AvatarFallback>
-          </Avatar>
+          <div className="relative">
+            <Avatar className="w-10 h-10">
+              <AvatarImage src={otherUserAvatar || undefined} />
+              <AvatarFallback className="bg-primary/10 text-primary">
+                {(chatName && chatName.charAt(0).toUpperCase()) || "?"}
+              </AvatarFallback>
+            </Avatar>
+            {chatType === "private" && otherUserStatus && isUserOnline(otherUserStatus.lastSeen, otherUserStatus.status) && (
+              <div className="absolute bottom-0 right-0 w-3 h-3 bg-accent rounded-full border-2 border-background" />
+            )}
+          </div>
           <div>
             <h2 className="font-semibold">{chatName || "Неизвестный контакт"}</h2>
+            {chatType === "private" && otherUserStatus && (
+              <p className="text-xs text-muted-foreground">
+                {getLastSeenText(otherUserStatus.lastSeen, otherUserStatus.status)}
+              </p>
+            )}
           </div>
         </div>
 
