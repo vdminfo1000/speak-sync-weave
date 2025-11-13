@@ -19,6 +19,7 @@ import VideoCall from "@/components/VideoCall";
 import AudioCall from "@/components/AudioCall";
 import CallHistory from "@/components/CallHistory";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { NavMenu } from "@/components/NavMenu";
 
 const Messenger = () => {
   const navigate = useNavigate();
@@ -302,10 +303,17 @@ const Messenger = () => {
             <h1 className="text-xl font-bold">GoodOK</h1>
           </div>
           <div className="flex items-center gap-1">
-            <ThemeToggle />
             <Button variant="ghost" size="icon" onClick={() => navigate("/profile")}>
               <User className="w-5 h-5" />
             </Button>
+            <NavMenu
+              onOpenChatRequests={() => setIsRequestsOpen(true)}
+              onOpenCreateGroup={() => setIsCreateGroupOpen(true)}
+              onOpenCallHistory={() => setIsCallHistoryOpen(true)}
+              pendingRequestsCount={pendingRequestsCount}
+              missedCallsCount={missedCallsCount}
+            />
+            <ThemeToggle />
             <Button variant="ghost" size="icon" onClick={handleLogout}>
               <LogOut className="w-5 h-5" />
             </Button>
