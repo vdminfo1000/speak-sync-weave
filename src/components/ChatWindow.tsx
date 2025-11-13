@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Send, Phone, Video, MoreVertical, Mic, VideoIcon, Search, Settings2, Reply } from "lucide-react";
+import { Send, Phone, Video, MoreVertical, Mic, VideoIcon, Search, Settings2, Reply, Users, ArrowLeft } from "lucide-react";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { toast } from "sonner";
@@ -20,6 +20,8 @@ import MessageStatus from "./MessageStatus";
 import MessageReactions from "./MessageReactions";
 import MessageSearch from "./MessageSearch";
 import GroupManagementDialog from "./GroupManagementDialog";
+import AddGroupMemberDialog from "./AddGroupMemberDialog";
+import ChannelSettings from "./ChannelSettings";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -86,10 +88,11 @@ interface Message {
 
 interface ChatWindowProps {
   chatId: string;
+  onBack?: () => void;
   onStartCall?: (params: { chatId: string; otherUserId: string; otherUserName: string; callType: "audio" | "video" }) => void;
 }
 
-const ChatWindow = ({ chatId, onStartCall }: ChatWindowProps) => {
+const ChatWindow = ({ chatId, onBack, onStartCall }: ChatWindowProps) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(true);
@@ -108,6 +111,8 @@ const ChatWindow = ({ chatId, onStartCall }: ChatWindowProps) => {
   const [replyingTo, setReplyingTo] = useState<{ id: string; content: string; username: string } | null>(null);
   const [showSearch, setShowSearch] = useState(false);
   const [showGroupManagement, setShowGroupManagement] = useState(false);
+  const [showAddMembers, setShowAddMembers] = useState(false);
+  const [showChannelSettings, setShowChannelSettings] = useState(false);
   const [chatType, setChatType] = useState<string>("private");
   const [currentUserRole, setCurrentUserRole] = useState<string>("member");
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -595,6 +600,11 @@ const ChatWindow = ({ chatId, onStartCall }: ChatWindowProps) => {
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between p-4 border-b border-border bg-card">
         <div className="flex items-center gap-3">
+          {onBack && (
+            <Button variant="ghost" size="icon" onClick={onBack}>
+              <ArrowLeft className="w-5 h-5" />
+            </Button>
+          )}
           <div className="relative">
             <Avatar className="w-10 h-10">
               <AvatarImage src={otherUserAvatar || undefined} />
@@ -625,13 +635,26 @@ const ChatWindow = ({ chatId, onStartCall }: ChatWindowProps) => {
             <Search className="w-5 h-5" />
           </Button>
           {chatType !== "private" && (
-            <Button 
-              variant="ghost" 
-              size="icon"
-              onClick={() => setShowGroupManagement(true)}
-            >
-              <Settings2 className="w-5 h-5" />
-            </Button>
+            <>
+              <Button 
+                variant="ghost" 
+                size="icon"
+                onClick={() => setShowAddMembers(true)}
+                title="Добавить участников"
+              >
+                <Users className="w-5 h-5" />
+              </Button>
+              {chatType === "channel" && currentUserRole === "owner" && (
+                <Button 
+                  variant="ghost" 
+                  size="icon"
+                  onClick={() => setShowChannelSettings(true)}
+                  title="Настройки канала"
+                >
+                  <Settings2 className="w-5 h-5" />
+                </Button>
+              )}
+            </>
           )}
           <Button 
             variant="ghost" 

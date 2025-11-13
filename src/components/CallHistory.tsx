@@ -141,33 +141,40 @@ const CallHistory = ({ isOpen, onClose, currentUserId }: CallHistoryProps) => {
               {calls.map((call) => {
                 const info = getCallDescription(call);
                 return (
-                  <div
-                    key={call.id}
-                    className="flex items-center gap-3 p-3 rounded-lg hover:bg-secondary/50 transition-colors"
-                  >
-                    <Avatar className="w-10 h-10">
-                      <AvatarFallback className="bg-primary/10 text-primary">
-                        {info.name.charAt(0).toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
+                   <div
+                     key={call.id}
+                     className="p-4 rounded-lg border border-border/50 hover:bg-muted/50 transition-colors"
+                   >
+                     <div className="flex items-start gap-3">
+                       <Avatar className="w-12 h-12">
+                         <AvatarFallback className="bg-primary/10 text-primary">
+                           {info.name.charAt(0).toUpperCase()}
+                         </AvatarFallback>
+                       </Avatar>
 
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        {getCallIcon(call)}
-                        <p className="font-medium truncate">{info.name}</p>
-                      </div>
-                      <p className="text-xs text-muted-foreground">{info.description}</p>
-                    </div>
-
-                    <div className="text-right">
-                      <p className="text-xs text-muted-foreground">
-                        {format(new Date(call.started_at), "d MMM, HH:mm", { locale: ru })}
-                      </p>
-                      {call.duration > 0 && (
-                        <p className="text-xs text-muted-foreground">{formatDuration(call.duration)}</p>
-                      )}
-                    </div>
-                  </div>
+                       <div className="flex-1 min-w-0 space-y-1">
+                         <div className="flex items-center gap-2">
+                           {getCallIcon(call)}
+                           <p className="font-semibold truncate">{info.name}</p>
+                         </div>
+                         <p className="text-sm text-muted-foreground">{info.description}</p>
+                         
+                         <div className="flex items-center gap-3 text-xs text-muted-foreground pt-1">
+                           <span>
+                             {format(new Date(call.started_at), "dd MMM yyyy, HH:mm", { locale: ru })}
+                           </span>
+                           {call.duration > 0 && (
+                             <>
+                               <span>•</span>
+                               <span className="font-medium">
+                                 Длительность: {formatDuration(call.duration)}
+                               </span>
+                             </>
+                           )}
+                         </div>
+                       </div>
+                     </div>
+                   </div>
                 );
               })}
             </div>

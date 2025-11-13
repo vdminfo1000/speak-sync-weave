@@ -19,10 +19,11 @@ import VideoCall from "@/components/VideoCall";
 import AudioCall from "@/components/AudioCall";
 import CallHistory from "@/components/CallHistory";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import SwipeablePanel from "@/components/SwipeablePanel";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 const Messenger = () => {
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isRequestsOpen, setIsRequestsOpen] = useState(false);
@@ -50,8 +51,8 @@ const Messenger = () => {
   // Отслеживаем статус пользователя
   useUserPresence(currentUserId || null);
   
-  // Отслеживаем пропущенные звонки
-  const { missedCallsCount } = useCallHistory(currentUserId);
+  // Отслеживаем историю звонков
+  useCallHistory(currentUserId);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -295,15 +296,9 @@ const Messenger = () => {
   };
 
   return (
-    <SwipeablePanel
-      onOpenChatRequests={() => setIsRequestsOpen(true)}
-      onOpenCreateGroup={() => setIsCreateGroupOpen(true)}
-      onOpenCallHistory={() => setIsCallHistoryOpen(true)}
-      pendingRequestsCount={pendingRequestsCount}
-      missedCallsCount={missedCallsCount}
-    >
-      <div className="flex h-screen bg-background w-full">
-        <div className="w-80 border-r border-border flex flex-col bg-card">
+    <div className="flex h-screen bg-background w-full overflow-hidden">
+      {/* Sidebar - скрыта на мобильных когда открыт чат */}
+      <div className={`${isMobile && selectedChatId ? 'hidden' : 'flex'} w-full md:w-80 border-r border-border flex-col bg-card`}>
           <div className="p-4 border-b border-border flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Shield className="w-6 h-6 text-primary" />
@@ -379,19 +374,11 @@ const Messenger = () => {
 
           <Button 
             variant="outline" 
-            className="w-full relative" 
+            className="w-full" 
             onClick={() => setIsCallHistoryOpen(true)}
           >
             <Phone className="w-4 h-4 mr-2" />
             История звонков
-            {missedCallsCount > 0 && (
-              <Badge 
-                variant="destructive" 
-                className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
-              >
-                {missedCallsCount}
-              </Badge>
-            )}
           </Button>
 
         </div>
@@ -404,10 +391,12 @@ const Messenger = () => {
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col">
+      {/* Main chat area */}
+      <div className={`${isMobile && !selectedChatId ? 'hidden' : 'flex-1'} flex flex-col`}>
         {selectedChatId ? (
           <ChatWindow 
-            chatId={selectedChatId} 
+            chatId={selectedChatId}
+            onBack={isMobile ? () => setSelectedChatId(null) : undefined}
             onStartCall={(params) => {
               setActiveCall({
                 ...params,
@@ -477,8 +466,7 @@ const Messenger = () => {
           isInitiator={activeCall.isInitiator}
         />
       )}
-      </div>
-    </SwipeablePanel>
+    </div>
   );
 };
 
