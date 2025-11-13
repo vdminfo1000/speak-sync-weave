@@ -80,6 +80,7 @@ interface Message {
     avatar_url: string | null;
   };
   read_by?: Array<{ user_id: string }>;
+  delivered_to?: Array<{ user_id: string }>;
   replied_message?: {
     content: string;
     sender: { username: string };
@@ -285,9 +286,14 @@ const ChatWindow = ({ chatId, onBack, onStartCall }: ChatWindowProps) => {
             .eq("id", message.sender_id)
             .single();
 
-          // Get read status
+          // Get read and delivery status
           const { data: reads } = await supabase
             .from("message_reads")
+            .select("user_id")
+            .eq("message_id", message.id);
+
+          const { data: deliveries } = await supabase
+            .from("message_deliveries")
             .select("user_id")
             .eq("message_id", message.id);
 
@@ -306,6 +312,7 @@ const ChatWindow = ({ chatId, onBack, onStartCall }: ChatWindowProps) => {
             ...message, 
             sender: profile, 
             read_by: reads || [],
+            delivered_to: deliveries || [],
             replied_message 
           };
         })
@@ -313,8 +320,24 @@ const ChatWindow = ({ chatId, onBack, onStartCall }: ChatWindowProps) => {
 
       setMessages(messagesWithSenders);
       
-      // Помечаем все непрочитанные сообщения как прочитанные
-      await markMessagesAsRead(messagesData);
+      // Mark all unread messages as delivered and read
+      if (currentUserId) {
+        const unreadMessages = messagesData.filter((m: any) => m.sender_id !== currentUserId);
+        
+        for (const msg of unreadMessages) {
+          // Mark as delivered
+          await supabase.from("message_deliveries").upsert({
+            message_id: msg.id,
+            user_id: currentUserId
+          }, { onConflict: 'message_id,user_id', ignoreDuplicates: true });
+          
+          // Mark as read
+          await supabase.from("message_reads").upsert({
+            message_id: msg.id,
+            user_id: currentUserId
+          }, { onConflict: 'message_id,user_id', ignoreDuplicates: true });
+        }
+      }
     } catch (error) {
       console.error("Error loading messages:", error);
     } finally {
@@ -736,7 +759,7 @@ const ChatWindow = ({ chatId, onBack, onStartCall }: ChatWindowProps) => {
                       <MessageStatus
                         isOwn={isOwn}
                         isRead={message.read_by ? message.read_by.some((read: any) => read.user_id !== message.sender_id) : false}
-                        isDelivered={!!message.created_at}
+                        isDelivered={message.delivered_to ? message.delivered_to.length > 0 : false}
                       />
                       {!isDeleted && (
                         <MessageActions
