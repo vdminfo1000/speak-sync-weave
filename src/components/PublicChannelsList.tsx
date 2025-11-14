@@ -10,8 +10,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Search, Radio, Users } from "lucide-react";
+import { Search, Radio, Users, Plus } from "lucide-react";
 import { toast } from "sonner";
+import CreateChannelDialog from "./CreateChannelDialog";
 
 interface Channel {
   id: string;
@@ -36,6 +37,7 @@ const PublicChannelsList = ({
   const [filteredChannels, setFilteredChannels] = useState<Channel[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isCreateChannelOpen, setIsCreateChannelOpen] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -133,25 +135,35 @@ const PublicChannelsList = ({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Radio className="w-5 h-5" />
-            Публичные каналы
-          </DialogTitle>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Radio className="w-5 h-5" />
+                Публичные каналы
+              </div>
+              <Button
+                size="sm"
+                onClick={() => setIsCreateChannelOpen(true)}
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Создать канал
+              </Button>
+            </DialogTitle>
+          </DialogHeader>
 
-        <div className="space-y-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Поиск каналов..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9"
-            />
-          </div>
+          <div className="space-y-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Поиск каналов..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9"
+              />
+            </div>
 
           <ScrollArea className="h-[400px]">
             {loading ? (
@@ -194,9 +206,19 @@ const PublicChannelsList = ({
               </div>
             )}
           </ScrollArea>
-        </div>
-      </DialogContent>
-    </Dialog>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <CreateChannelDialog
+        open={isCreateChannelOpen}
+        onOpenChange={setIsCreateChannelOpen}
+        onChannelCreated={(chatId) => {
+          loadChannels();
+          onChannelJoin(chatId);
+        }}
+      />
+    </>
   );
 };
 

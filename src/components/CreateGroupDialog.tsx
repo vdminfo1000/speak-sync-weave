@@ -35,7 +35,6 @@ const CreateGroupDialog = ({
   onGroupCreated,
 }: CreateGroupDialogProps) => {
   const [groupName, setGroupName] = useState("");
-  const [chatType, setChatType] = useState<"group" | "channel">("group");
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [filteredContacts, setFilteredContacts] = useState<Contact[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -48,7 +47,6 @@ const CreateGroupDialog = ({
       setGroupName("");
       setSelectedContacts(new Set());
       setSearchQuery("");
-      setChatType("group");
     }
   }, [open]);
 
@@ -120,8 +118,7 @@ const CreateGroupDialog = ({
       return;
     }
 
-    // Для каналов участники не обязательны
-    if (chatType === "group" && selectedContacts.size === 0) {
+    if (selectedContacts.size === 0) {
       toast.error("Выберите хотя бы одного участника");
       return;
     }
@@ -139,9 +136,9 @@ const CreateGroupDialog = ({
         .from("chats")
         .insert({
           name: groupName,
-          is_group: chatType === "group",
-          chat_type: chatType,
-          is_public: chatType === "channel",
+          is_group: true,
+          chat_type: "group",
+          is_public: false,
         })
         .select()
         .single();
@@ -169,27 +166,23 @@ const CreateGroupDialog = ({
       }
 
       // Then add other members
-      if (selectedContacts.size > 0) {
-        const otherMembers = Array.from(selectedContacts).map((contactId) => ({
-          chat_id: chat.id,
-          user_id: contactId,
-          role: "member" as const,
-        }));
+      const otherMembers = Array.from(selectedContacts).map((contactId) => ({
+        chat_id: chat.id,
+        user_id: contactId,
+        role: "member" as const,
+      }));
 
-        const { error: membersError } = await supabase
-          .from("chat_members")
-          .insert(otherMembers);
+      const { error: membersError } = await supabase
+        .from("chat_members")
+        .insert(otherMembers);
 
-        if (membersError) {
-          console.error("Error adding members:", membersError);
-          toast.error("Ошибка при добавлении участников");
-          return;
-        }
+      if (membersError) {
+        console.error("Error adding members:", membersError);
+        toast.error("Ошибка при добавлении участников");
+        return;
       }
 
-      toast.success(
-        chatType === "channel" ? "Канал создан" : "Группа создана"
-      );
+      toast.success("Группа создана");
       onGroupCreated(chat.id);
       onOpenChange(false);
     } catch (error: any) {
@@ -204,37 +197,25 @@ const CreateGroupDialog = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Создать группу или канал</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <Users className="w-5 h-5" />
+            Создать группу
+          </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
-          <Tabs value={chatType} onValueChange={(v) => setChatType(v as "group" | "channel")}>
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="group" className="flex items-center gap-2">
-                <Users className="h-4 w-4" />
-                Группа
-              </TabsTrigger>
-              <TabsTrigger value="channel" className="flex items-center gap-2">
-                <Radio className="h-4 w-4" />
-                Канал
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-
           <div className="space-y-2">
-            <Label htmlFor="groupName">
-              {chatType === "channel" ? "Название канала" : "Название группы"}
-            </Label>
+            <Label htmlFor="groupName">Название группы</Label>
             <Input
               id="groupName"
               value={groupName}
               onChange={(e) => setGroupName(e.target.value)}
-              placeholder={chatType === "channel" ? "Мой канал" : "Моя группа"}
+              placeholder="Моя группа"
             />
           </div>
 
           <div className="space-y-2">
-            <Label>Участники {chatType === "channel" && "(необязательно)"}</Label>
+            <Label>Участники</Label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input

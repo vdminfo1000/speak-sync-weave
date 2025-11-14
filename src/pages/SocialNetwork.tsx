@@ -1,6 +1,7 @@
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Heart, MessageCircle, Share2, Search, Home, User } from "lucide-react";
+import { ArrowLeft, Heart, MessageCircle, Share2, Search, Home, User, Bookmark, Image as ImageIcon } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -8,14 +9,17 @@ import { Input } from "@/components/ui/input";
 import { useSocialPosts } from "@/hooks/useSocialPosts";
 import { CreatePostDialog } from "@/components/CreatePostDialog";
 import { supabase } from "@/integrations/supabase/client";
-import { useEffect, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { ru } from "date-fns/locale";
+import { StoriesBar } from "@/components/StoriesBar";
+import { PostComments } from "@/components/PostComments";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
 const SocialNetwork = () => {
   const navigate = useNavigate();
-  const { posts, isLoading, createPost, toggleLike } = useSocialPosts();
+  const { posts, isLoading, createPost, toggleLike, savePost } = useSocialPosts();
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [showComments, setShowComments] = useState<string | null>(null);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -36,6 +40,9 @@ const SocialNetwork = () => {
         <CreatePostDialog onCreatePost={createPost} />
       </div>
 
+      {/* Stories */}
+      <StoriesBar />
+
       <div className="container mx-auto max-w-6xl">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-4 p-4">
           {/* Left Sidebar - Navigation */}
@@ -50,9 +57,13 @@ const SocialNetwork = () => {
                   <Search className="w-4 h-4 mr-2" />
                   Поиск
                 </Button>
-                <Button variant="ghost" className="w-full justify-start">
+                <Button variant="ghost" className="w-full justify-start" onClick={() => navigate("/profile")}>
                   <User className="w-4 h-4 mr-2" />
                   Профиль
+                </Button>
+                <Button variant="ghost" className="w-full justify-start">
+                  <Bookmark className="w-4 h-4 mr-2" />
+                  Сохраненное
                 </Button>
               </CardContent>
             </Card>
@@ -60,14 +71,19 @@ const SocialNetwork = () => {
 
           {/* Main Content */}
           <div className="col-span-1 md:col-span-6 space-y-4">
-            {/* Create Post */}
+            {/* Create Post Quick Access */}
             <Card>
               <CardContent className="p-4">
                 <div className="flex gap-3">
                   <Avatar>
                     <AvatarFallback>Вы</AvatarFallback>
                   </Avatar>
-                  <Input placeholder="Что у вас нового?" className="flex-1" />
+                  <Input placeholder="Что у вас нового?" className="flex-1" readOnly />
+                  <CreatePostDialog onCreatePost={createPost}>
+                    <Button size="icon" variant="ghost">
+                      <ImageIcon className="w-5 h-5" />
+                    </Button>
+                  </CreatePostDialog>
                 </div>
               </CardContent>
             </Card>
@@ -77,6 +93,7 @@ const SocialNetwork = () => {
               <TabsList className="w-full">
                 <TabsTrigger value="feed" className="flex-1">Лента</TabsTrigger>
                 <TabsTrigger value="popular" className="flex-1">Популярное</TabsTrigger>
+                <TabsTrigger value="following" className="flex-1">Подписки</TabsTrigger>
               </TabsList>
               
               <TabsContent value="feed" className="space-y-4 mt-4">
@@ -89,6 +106,7 @@ const SocialNetwork = () => {
                 ) : posts && posts.length > 0 ? (
                   posts.map((post) => {
                     const isLiked = post.social_likes?.some(like => like.user_id === currentUserId);
+                    const isSaved = post.saved_posts?.some(save => save.user_id === currentUserId);
                     const likesCount = post.social_likes?.length || 0;
                     const commentsCount = post.social_comments?.length || 0;
                     
@@ -129,13 +147,31 @@ const SocialNetwork = () => {
                               <Heart className={`w-4 h-4 mr-1 ${isLiked ? "fill-current" : ""}`} />
                               {likesCount}
                             </Button>
-                            <Button variant="ghost" size="sm">
-                              <MessageCircle className="w-4 h-4 mr-1" />
-                              {commentsCount}
-                            </Button>
+                            <Dialog>
+                              <DialogTrigger asChild>
+                                <Button variant="ghost" size="sm" onClick={() => setShowComments(post.id)}>
+                                  <MessageCircle className="w-4 h-4 mr-1" />
+                                  {commentsCount}
+                                </Button>
+                              </DialogTrigger>
+                              <DialogContent className="max-w-2xl">
+                                <DialogHeader>
+                                  <DialogTitle>Комментарии</DialogTitle>
+                                </DialogHeader>
+                                <PostComments postId={post.id} />
+                              </DialogContent>
+                            </Dialog>
                             <Button variant="ghost" size="sm">
                               <Share2 className="w-4 h-4 mr-1" />
                               Поделиться
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => savePost({ postId: post.id, isSaved })}
+                              className={isSaved ? "text-primary" : ""}
+                            >
+                              <Bookmark className={`w-4 h-4 ${isSaved ? "fill-current" : ""}`} />
                             </Button>
                           </div>
                         </CardContent>
@@ -155,6 +191,14 @@ const SocialNetwork = () => {
                 <Card>
                   <CardContent className="p-8 text-center">
                     <p className="text-muted-foreground">Популярные посты появятся здесь</p>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="following" className="mt-4">
+                <Card>
+                  <CardContent className="p-8 text-center">
+                    <p className="text-muted-foreground">Посты от ваших подписок появятся здесь</p>
                   </CardContent>
                 </Card>
               </TabsContent>

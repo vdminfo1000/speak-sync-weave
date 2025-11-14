@@ -11,7 +11,7 @@ import ChatRequests from "@/components/ChatRequests";
 import CreateGroupDialog from "@/components/CreateGroupDialog";
 import { useUserPresence } from "@/hooks/useUserPresence";
 import { useCallHistory } from "@/hooks/useCallHistory";
-import { LogOut, Plus, Shield, MessageCircle, Bell, User, Phone, Users } from "lucide-react";
+import { LogOut, Plus, Shield, MessageCircle, Bell, User, Phone, Users, Radio } from "lucide-react";
 import { toast } from "sonner";
 import { getUserFriendlyError } from "@/lib/errorHandler";
 import IncomingCallNotification from "@/components/IncomingCallNotification";
@@ -320,8 +320,8 @@ const Messenger = () => {
             </div>
           </div>
 
-        <div className="p-4 space-y-2 flex-1 overflow-hidden flex flex-col">
-          <div className="space-y-2">
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="p-4 space-y-2">
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
               <DialogTrigger asChild>
                 <Button className="w-full">
@@ -354,7 +354,7 @@ const Messenger = () => {
               className="w-full" 
               onClick={() => setIsPublicChannelsOpen(true)}
             >
-              <MessageCircle className="w-4 h-4 mr-2" />
+              <Radio className="w-4 h-4 mr-2" />
               Публичные каналы
             </Button>
 
@@ -365,7 +365,7 @@ const Messenger = () => {
                 onClick={() => setIsCreateGroupOpen(true)}
               >
                 <Users className="w-4 h-4 mr-2" />
-                Создать группу/канал
+                Создать группу
               </Button>
 
               <Dialog open={isRequestsOpen} onOpenChange={setIsRequestsOpen}>
@@ -399,8 +399,14 @@ const Messenger = () => {
             </div>
           </div>
 
+          <div className="flex-1 overflow-hidden">
+            <ChatList
+              onSelectChat={setSelectedChatId}
+              selectedChatId={selectedChatId}
+            />
+          </div>
 
-          <div className="pt-2 border-t border-border">
+          <div className="p-4 border-t border-border">
             <Button 
               variant="outline" 
               className="w-full" 
@@ -410,13 +416,6 @@ const Messenger = () => {
               История звонков
             </Button>
           </div>
-        </div>
-
-        <div className="flex-1 overflow-hidden">
-          <ChatList
-            onSelectChat={setSelectedChatId}
-            selectedChatId={selectedChatId}
-          />
         </div>
       </div>
 
