@@ -74,16 +74,14 @@ const SocialNetwork = () => {
             {/* Create Post Quick Access */}
             <Card>
               <CardContent className="p-4">
-                <div className="flex gap-3">
+                <div className="flex gap-3 items-center">
                   <Avatar>
                     <AvatarFallback>Вы</AvatarFallback>
                   </Avatar>
-                  <Input placeholder="Что у вас нового?" className="flex-1" readOnly />
-                  <CreatePostDialog onCreatePost={createPost}>
-                    <Button size="icon" variant="ghost">
-                      <ImageIcon className="w-5 h-5" />
-                    </Button>
-                  </CreatePostDialog>
+                  <div className="flex-1">
+                    <Input placeholder="Что у вас нового?" readOnly />
+                  </div>
+                  <CreatePostDialog onCreatePost={createPost} />
                 </div>
               </CardContent>
             </Card>
