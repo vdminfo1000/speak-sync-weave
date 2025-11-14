@@ -16,6 +16,7 @@ export interface SocialPost {
   };
   social_likes?: { id: string; user_id: string }[];
   social_comments?: { id: string }[];
+  saved_posts?: { id: string; user_id: string }[];
 }
 
 export const useSocialPosts = () => {
@@ -49,12 +50,18 @@ export const useSocialPosts = () => {
         .select("id, post_id")
         .in("post_id", postsData.map(p => p.id));
 
+      const { data: savedPosts } = await supabase
+        .from("saved_posts")
+        .select("id, user_id, post_id")
+        .in("post_id", postsData.map(p => p.id));
+
       // Combine data
       const enrichedPosts: SocialPost[] = postsData.map(post => ({
         ...post,
         profiles: profiles?.find(p => p.id === post.user_id),
         social_likes: likes?.filter(l => l.post_id === post.id) || [],
         social_comments: comments?.filter(c => c.post_id === post.id) || [],
+        saved_posts: savedPosts?.filter(s => s.post_id === post.id) || [],
       }));
 
       return enrichedPosts;
@@ -108,10 +115,35 @@ export const useSocialPosts = () => {
     },
   });
 
+  const savePost = useMutation({
+    mutationFn: async ({ postId, isSaved }: { postId: string; isSaved: boolean }) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      if (isSaved) {
+        const { error } = await supabase
+          .from("saved_posts")
+          .delete()
+          .eq("post_id", postId)
+          .eq("user_id", user.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("saved_posts")
+          .insert({ post_id: postId, user_id: user.id });
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["social-posts"] });
+    },
+  });
+
   return {
     posts,
     isLoading,
     createPost: createPost.mutate,
     toggleLike: toggleLike.mutate,
+    savePost: savePost.mutate,
   };
 };
