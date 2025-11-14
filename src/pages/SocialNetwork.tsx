@@ -1,36 +1,27 @@
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Plus, Heart, MessageCircle, Share2, Search, Home, User } from "lucide-react";
+import { ArrowLeft, Heart, MessageCircle, Share2, Search, Home, User } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
+import { useSocialPosts } from "@/hooks/useSocialPosts";
+import { CreatePostDialog } from "@/components/CreatePostDialog";
+import { supabase } from "@/integrations/supabase/client";
+import { useEffect, useState } from "react";
+import { formatDistanceToNow } from "date-fns";
+import { ru } from "date-fns/locale";
 
 const SocialNetwork = () => {
   const navigate = useNavigate();
+  const { posts, isLoading, createPost, toggleLike } = useSocialPosts();
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
-  const mockPosts = [
-    {
-      id: 1,
-      author: "Иван Петров",
-      avatar: "",
-      content: "Отличный день для новых начинаний! 🌟",
-      image: null,
-      likes: 24,
-      comments: 5,
-      timestamp: "2 часа назад"
-    },
-    {
-      id: 2,
-      author: "Мария Иванова",
-      avatar: "",
-      content: "Делюсь своими мыслями о важности общения",
-      image: null,
-      likes: 42,
-      comments: 12,
-      timestamp: "5 часов назад"
-    }
-  ];
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setCurrentUserId(user?.id || null);
+    });
+  }, []);
 
   return (
     <div className="min-h-screen bg-background">
@@ -42,9 +33,7 @@ const SocialNetwork = () => {
           </Button>
           <h1 className="text-xl font-bold">Социальная сеть</h1>
         </div>
-        <Button size="icon">
-          <Plus className="w-5 h-5" />
-        </Button>
+        <CreatePostDialog onCreatePost={createPost} />
       </div>
 
       <div className="container mx-auto max-w-6xl">
@@ -91,44 +80,75 @@ const SocialNetwork = () => {
               </TabsList>
               
               <TabsContent value="feed" className="space-y-4 mt-4">
-                {mockPosts.map((post) => (
-                  <Card key={post.id}>
-                    <CardHeader className="pb-3">
-                      <div className="flex items-center gap-3">
-                        <Avatar>
-                          <AvatarImage src={post.avatar} />
-                          <AvatarFallback>{post.author[0]}</AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1">
-                          <p className="font-semibold">{post.author}</p>
-                          <p className="text-sm text-muted-foreground">{post.timestamp}</p>
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      <p>{post.content}</p>
-                      {post.image && (
-                        <div className="rounded-lg overflow-hidden">
-                          <img src={post.image} alt="Post" className="w-full" />
-                        </div>
-                      )}
-                      <div className="flex items-center gap-4 pt-2">
-                        <Button variant="ghost" size="sm">
-                          <Heart className="w-4 h-4 mr-1" />
-                          {post.likes}
-                        </Button>
-                        <Button variant="ghost" size="sm">
-                          <MessageCircle className="w-4 h-4 mr-1" />
-                          {post.comments}
-                        </Button>
-                        <Button variant="ghost" size="sm">
-                          <Share2 className="w-4 h-4 mr-1" />
-                          Поделиться
-                        </Button>
-                      </div>
+                {isLoading ? (
+                  <Card>
+                    <CardContent className="p-8 text-center">
+                      <p className="text-muted-foreground">Загрузка...</p>
                     </CardContent>
                   </Card>
-                ))}
+                ) : posts && posts.length > 0 ? (
+                  posts.map((post) => {
+                    const isLiked = post.social_likes?.some(like => like.user_id === currentUserId);
+                    const likesCount = post.social_likes?.length || 0;
+                    const commentsCount = post.social_comments?.length || 0;
+                    
+                    return (
+                      <Card key={post.id}>
+                        <CardHeader className="pb-3">
+                          <div className="flex items-center gap-3">
+                            <Avatar>
+                              <AvatarImage src={post.profiles?.avatar_url || ""} />
+                              <AvatarFallback>
+                                {post.profiles?.full_name?.[0] || post.profiles?.username?.[0] || "U"}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1">
+                              <p className="font-semibold">
+                                {post.profiles?.full_name || post.profiles?.username || "Пользователь"}
+                              </p>
+                              <p className="text-sm text-muted-foreground">
+                                {formatDistanceToNow(new Date(post.created_at), { addSuffix: true, locale: ru })}
+                              </p>
+                            </div>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <p>{post.content}</p>
+                          {post.image_url && (
+                            <div className="rounded-lg overflow-hidden">
+                              <img src={post.image_url} alt="Post" className="w-full" />
+                            </div>
+                          )}
+                          <div className="flex items-center gap-4 pt-2">
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => toggleLike({ postId: post.id, isLiked })}
+                              className={isLiked ? "text-red-500" : ""}
+                            >
+                              <Heart className={`w-4 h-4 mr-1 ${isLiked ? "fill-current" : ""}`} />
+                              {likesCount}
+                            </Button>
+                            <Button variant="ghost" size="sm">
+                              <MessageCircle className="w-4 h-4 mr-1" />
+                              {commentsCount}
+                            </Button>
+                            <Button variant="ghost" size="sm">
+                              <Share2 className="w-4 h-4 mr-1" />
+                              Поделиться
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })
+                ) : (
+                  <Card>
+                    <CardContent className="p-8 text-center">
+                      <p className="text-muted-foreground">Постов пока нет. Создайте первый!</p>
+                    </CardContent>
+                  </Card>
+                )}
               </TabsContent>
               
               <TabsContent value="popular" className="mt-4">
