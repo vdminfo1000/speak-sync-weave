@@ -168,22 +168,20 @@ const Profile = () => {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="flex gap-4">
+              <div className="space-y-4">
                 <AvatarUpload
                   currentAvatarUrl={avatarUrl}
                   userId={userId}
                   username={username}
                   onAvatarUpdated={setAvatarUrl}
                 />
-                <div className="flex-1 flex items-center">
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowRingtoneSettings(true)}
-                    className="w-full"
-                  >
-                    Настройка мелодии звонка
-                  </Button>
-                </div>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowRingtoneSettings(true)}
+                  className="w-full"
+                >
+                  Настройка мелодии звонка
+                </Button>
               </div>
 
               <div className="space-y-2">

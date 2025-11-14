@@ -21,6 +21,7 @@ import CallHistory from "@/components/CallHistory";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import PublicChannelsList from "@/components/PublicChannelsList";
 import { useIsMobile } from "@/hooks/use-mobile";
+import AdditionalMenu from "@/components/AdditionalMenu";
 
 const Messenger = () => {
   const navigate = useNavigate();
@@ -31,6 +32,7 @@ const Messenger = () => {
   const [isCallHistoryOpen, setIsCallHistoryOpen] = useState(false);
   const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
   const [isPublicChannelsOpen, setIsPublicChannelsOpen] = useState(false);
+  const [isSocialNetworkOpen, setIsSocialNetworkOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string>("");
   const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
@@ -307,6 +309,7 @@ const Messenger = () => {
               <h1 className="text-xl font-bold">GoodOK</h1>
             </div>
             <div className="flex items-center gap-1">
+              <AdditionalMenu />
               <Button variant="ghost" size="icon" onClick={() => navigate("/profile")}>
                 <User className="w-5 h-5" />
               </Button>
@@ -317,81 +320,96 @@ const Messenger = () => {
             </div>
           </div>
 
-        <div className="p-4 space-y-2">
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="w-full">
-                <Plus className="w-4 h-4 mr-2" />
-                Новый чат
+        <div className="p-4 space-y-2 flex-1 overflow-hidden flex flex-col">
+          <div className="space-y-2">
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <DialogTrigger asChild>
+                <Button className="w-full">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Новый чат
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Отправить запрос на чат</DialogTitle>
+                </DialogHeader>
+                <ContactSearch
+                  onSelectContact={(profile) => sendChatRequest(profile.id)}
+                  currentUserId={currentUserId}
+                />
+              </DialogContent>
+            </Dialog>
+
+            <Button 
+              variant="outline" 
+              className="w-full" 
+              onClick={() => navigate("/social-network")}
+            >
+              <MessageCircle className="w-4 h-4 mr-2" />
+              Социальная сеть
+            </Button>
+
+            <Button 
+              variant="outline" 
+              className="w-full" 
+              onClick={() => setIsPublicChannelsOpen(true)}
+            >
+              <MessageCircle className="w-4 h-4 mr-2" />
+              Публичные каналы
+            </Button>
+
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                className="flex-1" 
+                onClick={() => setIsCreateGroupOpen(true)}
+              >
+                <Users className="w-4 h-4 mr-2" />
+                Создать группу/канал
               </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Отправить запрос на чат</DialogTitle>
-              </DialogHeader>
-              <ContactSearch
-                onSelectContact={(profile) => sendChatRequest(profile.id)}
-                currentUserId={currentUserId}
-              />
-            </DialogContent>
-          </Dialog>
 
-          <Button 
-            variant="outline" 
-            className="w-full" 
-            onClick={() => setIsCreateGroupOpen(true)}
-          >
-            <Users className="w-4 h-4 mr-2" />
-            Создать группу/канал
-          </Button>
+              <Dialog open={isRequestsOpen} onOpenChange={setIsRequestsOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" className="flex-1 relative">
+                    <Bell className="w-4 h-4 mr-2" />
+                    Запросы
+                    {pendingRequestsCount > 0 && (
+                      <Badge 
+                        variant="destructive" 
+                        className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
+                      >
+                        {pendingRequestsCount}
+                      </Badge>
+                    )}
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-2xl">
+                  <DialogHeader>
+                    <DialogTitle>Запросы на чат</DialogTitle>
+                  </DialogHeader>
+                  <ChatRequests
+                    currentUserId={currentUserId}
+                    onRequestAccepted={(chatId) => {
+                      setIsRequestsOpen(false);
+                      setSelectedChatId(chatId);
+                    }}
+                  />
+                </DialogContent>
+              </Dialog>
+            </div>
+          </div>
 
-          <Button 
-            variant="outline" 
-            className="w-full" 
-            onClick={() => setIsPublicChannelsOpen(true)}
-          >
-            <MessageCircle className="w-4 h-4 mr-2" />
-            Публичные каналы
-          </Button>
 
-          <Dialog open={isRequestsOpen} onOpenChange={setIsRequestsOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" className="w-full relative">
-                <Bell className="w-4 h-4 mr-2" />
-                Запросы
-                {pendingRequestsCount > 0 && (
-                  <Badge 
-                    variant="destructive" 
-                    className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
-                  >
-                    {pendingRequestsCount}
-                  </Badge>
-                )}
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>Запросы на чат</DialogTitle>
-              </DialogHeader>
-              <ChatRequests
-                currentUserId={currentUserId}
-                onRequestAccepted={(chatId) => {
-                  setIsRequestsOpen(false);
-                  setSelectedChatId(chatId);
-                }}
-              />
-            </DialogContent>
-          </Dialog>
-
-          <Button 
-            variant="outline" 
-            className="w-full" 
-            onClick={() => setIsCallHistoryOpen(true)}
-          >
-            <Phone className="w-4 h-4 mr-2" />
-            История звонков
-          </Button>
-
+          <div className="pt-2 border-t border-border">
+            <Button 
+              variant="outline" 
+              className="w-full" 
+              onClick={() => setIsCallHistoryOpen(true)}
+            >
+              <Phone className="w-4 h-4 mr-2" />
+              История звонков
+            </Button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-hidden">
