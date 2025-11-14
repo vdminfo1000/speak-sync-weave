@@ -17,14 +17,26 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 
 const SocialNetwork = () => {
   const navigate = useNavigate();
-  const { posts, isLoading, createPost, toggleLike, savePost } = useSocialPosts();
+  const { posts, isLoading, createPost, toggleLike, savePost, toggleFollow } = useSocialPosts();
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [showComments, setShowComments] = useState<string | null>(null);
+  const [followingUsers, setFollowingUsers] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      setCurrentUserId(user?.id || null);
-    });
+    const loadFollowing = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setCurrentUserId(user.id);
+        const { data } = await supabase
+          .from('social_follows')
+          .select('following_id')
+          .eq('follower_id', user.id);
+        if (data) {
+          setFollowingUsers(new Set(data.map(f => f.following_id)));
+        }
+      }
+    };
+    loadFollowing();
   }, []);
 
   return (
@@ -107,6 +119,8 @@ const SocialNetwork = () => {
                     const isSaved = post.saved_posts?.some(save => save.user_id === currentUserId);
                     const likesCount = post.social_likes?.length || 0;
                     const commentsCount = post.social_comments?.length || 0;
+                    const isFollowing = followingUsers.has(post.user_id);
+                    const isOwnPost = post.user_id === currentUserId;
                     
                     return (
                       <Card key={post.id}>
@@ -126,6 +140,26 @@ const SocialNetwork = () => {
                                 {formatDistanceToNow(new Date(post.created_at), { addSuffix: true, locale: ru })}
                               </p>
                             </div>
+                            {!isOwnPost && (
+                              <Button
+                                size="sm"
+                                variant={isFollowing ? "outline" : "default"}
+                                onClick={() => {
+                                  toggleFollow({ userId: post.user_id, isFollowing });
+                                  setFollowingUsers(prev => {
+                                    const newSet = new Set(prev);
+                                    if (isFollowing) {
+                                      newSet.delete(post.user_id);
+                                    } else {
+                                      newSet.add(post.user_id);
+                                    }
+                                    return newSet;
+                                  });
+                                }}
+                              >
+                                {isFollowing ? "Отписаться" : "Подписаться"}
+                              </Button>
+                            )}
                           </div>
                         </CardHeader>
                         <CardContent className="space-y-3">
