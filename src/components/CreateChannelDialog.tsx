@@ -50,6 +50,7 @@ const CreateChannelDialog = ({
           is_group: true,
           chat_type: "channel",
           is_public: true,
+          description: description.trim() || null,
         })
         .select()
         .single();

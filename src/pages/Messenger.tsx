@@ -322,11 +322,11 @@ const Messenger = () => {
 
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="p-4 space-y-2">
-            {/* Icon buttons row */}
+            {/* Buttons row */}
             <div className="flex gap-2 mb-2">
               <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                 <DialogTrigger asChild>
-                  <Button size="icon" variant="outline" title="Новый чат">
+                  <Button variant="outline" className="flex-1" title="Новый чат">
                     <Plus className="w-4 h-4" />
                   </Button>
                 </DialogTrigger>
@@ -342,8 +342,8 @@ const Messenger = () => {
               </Dialog>
 
               <Button 
-                size="icon" 
                 variant="outline" 
+                className="flex-1"
                 onClick={() => setIsCreateGroupOpen(true)}
                 title="Создать группу"
               >
@@ -352,7 +352,7 @@ const Messenger = () => {
 
               <Dialog open={isRequestsOpen} onOpenChange={setIsRequestsOpen}>
                 <DialogTrigger asChild>
-                  <Button size="icon" variant="outline" className="relative" title="Запросы">
+                  <Button variant="outline" className="flex-1 relative" title="Запросы">
                     <Bell className="w-4 h-4" />
                     {pendingRequestsCount > 0 && (
                       <Badge 

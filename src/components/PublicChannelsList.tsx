@@ -19,6 +19,7 @@ interface Channel {
   name: string;
   chat_type: string;
   created_at: string;
+  description?: string;
   member_count?: number;
 }
 
@@ -62,7 +63,7 @@ const PublicChannelsList = ({
       setLoading(true);
       const { data: channelsData, error } = await supabase
         .from("chats")
-        .select("id, name, chat_type, created_at")
+        .select("id, name, chat_type, created_at, description")
         .eq("is_public", true)
         .eq("chat_type", "channel")
         .order("created_at", { ascending: false });
@@ -189,6 +190,11 @@ const PublicChannelsList = ({
                       </Avatar>
                       <div className="flex-1 min-w-0">
                         <h3 className="font-semibold truncate">{channel.name}</h3>
+                        {channel.description && (
+                          <p className="text-sm text-muted-foreground truncate mt-0.5">
+                            {channel.description}
+                          </p>
+                        )}
                         <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
                           <Users className="w-3 h-3" />
                           <span>{channel.member_count} участников</span>
