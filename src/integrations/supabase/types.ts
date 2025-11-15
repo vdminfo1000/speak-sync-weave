@@ -61,6 +61,45 @@ export type Database = {
           },
         ]
       }
+      channel_read_markers: {
+        Row: {
+          chat_id: string
+          id: string
+          last_read_at: string | null
+          last_read_message_id: string | null
+          user_id: string
+        }
+        Insert: {
+          chat_id: string
+          id?: string
+          last_read_at?: string | null
+          last_read_message_id?: string | null
+          user_id: string
+        }
+        Update: {
+          chat_id?: string
+          id?: string
+          last_read_at?: string | null
+          last_read_message_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "channel_read_markers_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "chats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "channel_read_markers_last_read_message_id_fkey"
+            columns: ["last_read_message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chat_members: {
         Row: {
           chat_id: string
@@ -779,6 +818,10 @@ export type Database = {
       }
       has_chat_request_with_user: {
         Args: { target_user_id: string }
+        Returns: boolean
+      }
+      is_channel_admin: {
+        Args: { p_chat_id: string; p_user_id: string }
         Returns: boolean
       }
       is_chat_member_with_user: {

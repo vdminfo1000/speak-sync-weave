@@ -11,6 +11,7 @@ import ChatRequests from "@/components/ChatRequests";
 import CreateGroupDialog from "@/components/CreateGroupDialog";
 import { useUserPresence } from "@/hooks/useUserPresence";
 import { useCallHistory } from "@/hooks/useCallHistory";
+import { useChannelUnreadCount } from "@/hooks/useChannelUnreadCount";
 import { LogOut, Plus, Shield, MessageCircle, Bell, User, Phone, Users, Radio } from "lucide-react";
 import { toast } from "sonner";
 import { getUserFriendlyError } from "@/lib/errorHandler";
@@ -57,6 +58,10 @@ const Messenger = () => {
   
   // Отслеживаем историю звонков
   useCallHistory(currentUserId);
+
+  // Отслеживаем непрочитанные каналы
+  const { unreadCount: channelUnreadCount, resetUnreadCount: resetChannelUnread } = 
+    useChannelUnreadCount(currentUserId || null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -391,11 +396,22 @@ const Messenger = () => {
 
             <Button 
               variant="outline" 
-              className="w-full" 
-              onClick={() => setIsPublicChannelsOpen(true)}
+              className="w-full relative" 
+              onClick={() => {
+                setIsPublicChannelsOpen(true);
+                resetChannelUnread();
+              }}
             >
               <Radio className="w-4 h-4 mr-2" />
               Публичные каналы
+              {channelUnreadCount > 0 && (
+                <Badge 
+                  variant="destructive" 
+                  className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
+                >
+                  {channelUnreadCount}
+                </Badge>
+              )}
             </Button>
           </div>
 
