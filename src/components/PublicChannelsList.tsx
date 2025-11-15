@@ -39,12 +39,13 @@ const PublicChannelsList = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [isCreateChannelOpen, setIsCreateChannelOpen] = useState(false);
+  const [showMyChannels, setShowMyChannels] = useState(false);
 
   useEffect(() => {
     if (open) {
       loadChannels();
     }
-  }, [open]);
+  }, [open, showMyChannels]);
 
   useEffect(() => {
     if (searchQuery.trim()) {
@@ -61,12 +62,35 @@ const PublicChannelsList = ({
   const loadChannels = async () => {
     try {
       setLoading(true);
-      const { data: channelsData, error } = await supabase
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      let query = supabase
         .from("chats")
         .select("id, name, chat_type, created_at, description")
         .eq("is_public", true)
-        .eq("chat_type", "channel")
-        .order("created_at", { ascending: false });
+        .eq("chat_type", "channel");
+
+      // Filter by owner if showing "My Channels"
+      if (showMyChannels) {
+        const { data: myChannels } = await supabase
+          .from("chat_members")
+          .select("chat_id")
+          .eq("user_id", user.id)
+          .eq("role", "owner");
+
+        if (myChannels && myChannels.length > 0) {
+          const myChannelIds = myChannels.map((cm) => cm.chat_id);
+          query = query.in("id", myChannelIds);
+        } else {
+          setChannels([]);
+          setFilteredChannels([]);
+          setLoading(false);
+          return;
+        }
+      }
+
+      const { data: channelsData, error } = await query.order("created_at", { ascending: false });
 
       if (error) throw error;
 
@@ -143,15 +167,24 @@ const PublicChannelsList = ({
             <DialogTitle className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Radio className="w-5 h-5" />
-                Публичные каналы
+                {showMyChannels ? "Мои каналы" : "Публичные каналы"}
               </div>
-              <Button
-                size="sm"
-                onClick={() => setIsCreateChannelOpen(true)}
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Создать канал
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant={showMyChannels ? "outline" : "ghost"}
+                  onClick={() => setShowMyChannels(!showMyChannels)}
+                >
+                  {showMyChannels ? "Все каналы" : "Мои каналы"}
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => setIsCreateChannelOpen(true)}
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Создать канал
+                </Button>
+              </div>
             </DialogTitle>
           </DialogHeader>
 

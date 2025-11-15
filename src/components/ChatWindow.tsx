@@ -679,20 +679,24 @@ const ChatWindow = ({ chatId, onBack, onStartCall }: ChatWindowProps) => {
               )}
             </>
           )}
-          <Button 
-            variant="ghost" 
-            size="icon"
-            onClick={() => handleStartCall("audio")}
-          >
-            <Phone className="w-5 h-5" />
-          </Button>
-          <Button 
-            variant="ghost" 
-            size="icon"
-            onClick={() => handleStartCall("video")}
-          >
-            <Video className="w-5 h-5" />
-          </Button>
+          {chatType !== "channel" && (
+            <>
+              <Button 
+                variant="ghost" 
+                size="icon"
+                onClick={() => handleStartCall("audio")}
+              >
+                <Phone className="w-5 h-5" />
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="icon"
+                onClick={() => handleStartCall("video")}
+              >
+                <Video className="w-5 h-5" />
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
