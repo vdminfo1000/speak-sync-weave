@@ -10,9 +10,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Search, Radio, Users, Plus } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Search, Radio, Users, Plus, Settings, Crown } from "lucide-react";
 import { toast } from "sonner";
 import CreateChannelDialog from "./CreateChannelDialog";
+import ChatWindow from "./ChatWindow";
+import ChannelSettings from "./ChannelSettings";
+import ChannelAdminSettings from "./ChannelAdminSettings";
 
 interface Channel {
   id: string;
@@ -21,6 +25,7 @@ interface Channel {
   created_at: string;
   description?: string;
   member_count?: number;
+  user_role?: string;
 }
 
 interface PublicChannelsListProps {
@@ -40,12 +45,24 @@ const PublicChannelsList = ({
   const [loading, setLoading] = useState(false);
   const [isCreateChannelOpen, setIsCreateChannelOpen] = useState(false);
   const [showMyChannels, setShowMyChannels] = useState(false);
+  const [showSubscriptions, setShowSubscriptions] = useState(false);
+  const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string>("");
+  const [isChannelSettingsOpen, setIsChannelSettingsOpen] = useState(false);
+  const [isAdminSettingsOpen, setIsAdminSettingsOpen] = useState(false);
+  const [settingsChannelId, setSettingsChannelId] = useState<string>("");
 
   useEffect(() => {
     if (open) {
+      loadCurrentUser();
       loadChannels();
     }
-  }, [open, showMyChannels]);
+  }, [open, showMyChannels, showSubscriptions]);
+
+  const loadCurrentUser = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) setCurrentUserId(user.id);
+  };
 
   useEffect(() => {
     if (searchQuery.trim()) {
@@ -90,11 +107,30 @@ const PublicChannelsList = ({
         }
       }
 
+      // Filter by subscriptions if showing "Subscriptions"
+      if (showSubscriptions) {
+        const { data: subscriptions } = await supabase
+          .from("chat_members")
+          .select("chat_id")
+          .eq("user_id", user.id)
+          .neq("role", "owner");
+
+        if (subscriptions && subscriptions.length > 0) {
+          const subChannelIds = subscriptions.map((cm) => cm.chat_id);
+          query = query.in("id", subChannelIds);
+        } else {
+          setChannels([]);
+          setFilteredChannels([]);
+          setLoading(false);
+          return;
+        }
+      }
+
       const { data: channelsData, error } = await query.order("created_at", { ascending: false });
 
       if (error) throw error;
 
-      // Get member counts for each channel
+      // Get member counts and user role for each channel
       const channelsWithCounts = await Promise.all(
         (channelsData || []).map(async (channel) => {
           const { count } = await supabase
@@ -102,9 +138,17 @@ const PublicChannelsList = ({
             .select("*", { count: "exact", head: true })
             .eq("chat_id", channel.id);
 
+          const { data: userMember } = await supabase
+            .from("chat_members")
+            .select("role")
+            .eq("chat_id", channel.id)
+            .eq("user_id", user.id)
+            .maybeSingle();
+
           return {
             ...channel,
             member_count: count || 0,
+            user_role: userMember?.role,
           };
         })
       );
@@ -159,30 +203,65 @@ const PublicChannelsList = ({
     }
   };
 
+  const handleChannelClick = (channelId: string) => {
+    setSelectedChannelId(channelId);
+  };
+
+  const handleOpenSettings = (channelId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSettingsChannelId(channelId);
+    setIsChannelSettingsOpen(true);
+  };
+
+  const handleOpenAdminSettings = (channelId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSettingsChannelId(channelId);
+    setIsAdminSettingsOpen(true);
+  };
+
+  const handleFilterChange = (filter: "all" | "my" | "subscriptions") => {
+    setShowMyChannels(filter === "my");
+    setShowSubscriptions(filter === "subscriptions");
+  };
+
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-6xl max-h-[90vh]">
           <DialogHeader>
             <DialogTitle className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Radio className="w-5 h-5" />
-                {showMyChannels ? "Мои каналы" : "Публичные каналы"}
+                {showMyChannels ? "Мои каналы" : showSubscriptions ? "Подписки" : "Публичные каналы"}
               </div>
               <div className="flex items-center gap-2">
                 <Button
                   size="sm"
-                  variant={showMyChannels ? "outline" : "ghost"}
-                  onClick={() => setShowMyChannels(!showMyChannels)}
+                  variant={!showMyChannels && !showSubscriptions ? "default" : "outline"}
+                  onClick={() => handleFilterChange("all")}
                 >
-                  {showMyChannels ? "Все каналы" : "Мои каналы"}
+                  Все каналы
+                </Button>
+                <Button
+                  size="sm"
+                  variant={showSubscriptions ? "default" : "outline"}
+                  onClick={() => handleFilterChange("subscriptions")}
+                >
+                  Подписки
+                </Button>
+                <Button
+                  size="sm"
+                  variant={showMyChannels ? "default" : "outline"}
+                  onClick={() => handleFilterChange("my")}
+                >
+                  Мои каналы
                 </Button>
                 <Button
                   size="sm"
                   onClick={() => setIsCreateChannelOpen(true)}
                 >
                   <Plus className="w-4 h-4 mr-2" />
-                  Создать канал
+                  Создать
                 </Button>
               </div>
             </DialogTitle>
@@ -199,52 +278,102 @@ const PublicChannelsList = ({
               />
             </div>
 
-          <ScrollArea className="h-[400px]">
-            {loading ? (
-              <div className="flex justify-center items-center h-32">
-                <p className="text-muted-foreground">Загрузка...</p>
-              </div>
-            ) : filteredChannels.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                {searchQuery ? "Каналы не найдены" : "Нет публичных каналов"}
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {filteredChannels.map((channel) => (
-                  <div
-                    key={channel.id}
-                    className="p-4 rounded-lg border border-border hover:bg-muted/50 transition-colors"
-                  >
-                    <div className="flex items-start gap-3">
-                      <Avatar className="w-12 h-12">
-                        <AvatarFallback className="bg-primary/10 text-primary">
-                          <Radio className="w-6 h-6" />
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold truncate">{channel.name}</h3>
-                        {channel.description && (
-                          <p className="text-sm text-muted-foreground truncate mt-0.5">
-                            {channel.description}
-                          </p>
-                        )}
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
-                          <Users className="w-3 h-3" />
-                          <span>{channel.member_count} участников</span>
+          <div className="grid grid-cols-2 gap-4 h-[600px]">
+            <ScrollArea className="h-full border-r pr-4">
+              {loading ? (
+                <div className="flex justify-center items-center h-32">
+                  <p className="text-muted-foreground">Загрузка...</p>
+                </div>
+              ) : filteredChannels.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  {searchQuery ? "Каналы не найдены" : "Нет публичных каналов"}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {filteredChannels.map((channel) => (
+                    <div
+                      key={channel.id}
+                      onClick={() => handleChannelClick(channel.id)}
+                      className={`p-4 rounded-lg border cursor-pointer transition-colors ${
+                        selectedChannelId === channel.id
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:bg-muted/50"
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <Avatar className="w-12 h-12">
+                          <AvatarFallback className="bg-primary/10 text-primary">
+                            <Radio className="w-6 h-6" />
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold truncate">{channel.name}</h3>
+                          {channel.description && (
+                            <p className="text-sm text-muted-foreground truncate mt-0.5">
+                              {channel.description}
+                            </p>
+                          )}
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
+                            <Users className="w-3 h-3" />
+                            <span>{channel.member_count} участников</span>
+                          </div>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          {channel.user_role === "owner" ? (
+                            <>
+                              <Badge variant="default" className="gap-1">
+                                <Crown className="w-3 h-3" />
+                                Владелец
+                              </Badge>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={(e) => handleOpenSettings(channel.id, e)}
+                              >
+                                <Settings className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={(e) => handleOpenAdminSettings(channel.id, e)}
+                              >
+                                <Users className="w-4 h-4" />
+                              </Button>
+                            </>
+                          ) : channel.user_role ? (
+                            <Badge variant="secondary">Подписан</Badge>
+                          ) : (
+                            <Button
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleJoinChannel(channel.id);
+                              }}
+                            >
+                              Подписаться
+                            </Button>
+                          )}
                         </div>
                       </div>
-                      <Button
-                        size="sm"
-                        onClick={() => handleJoinChannel(channel.id)}
-                      >
-                        Присоединиться
-                      </Button>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </ScrollArea>
+                  ))}
+                </div>
+              )}
+            </ScrollArea>
+
+            <div className="h-full">
+              {selectedChannelId ? (
+                <ChatWindow
+                  key={selectedChannelId}
+                  chatId={selectedChannelId}
+                />
+              ) : (
+                <div className="flex items-center justify-center h-full text-muted-foreground">
+                  Выберите канал для просмотра
+                </div>
+              )}
+            </div>
+          </div>
           </div>
         </DialogContent>
       </Dialog>
@@ -254,9 +383,24 @@ const PublicChannelsList = ({
         onOpenChange={setIsCreateChannelOpen}
         onChannelCreated={(chatId) => {
           loadChannels();
-          onChannelJoin(chatId);
+          setSelectedChannelId(chatId);
         }}
       />
+
+      {settingsChannelId && (
+        <>
+          <ChannelSettings
+            open={isChannelSettingsOpen}
+            onOpenChange={setIsChannelSettingsOpen}
+            chatId={settingsChannelId}
+          />
+          <ChannelAdminSettings
+            open={isAdminSettingsOpen}
+            onOpenChange={setIsAdminSettingsOpen}
+            chatId={settingsChannelId}
+          />
+        </>
+      )}
     </>
   );
 };

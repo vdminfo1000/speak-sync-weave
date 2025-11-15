@@ -141,6 +141,7 @@ const ChatList = ({ onSelectChat, selectedChatId }: ChatListProps) => {
         .from("chats")
         .select("*")
         .in("id", chatIds)
+        .neq("chat_type", "channel")
         .order("updated_at", { ascending: false });
 
       if (!chatsData) return;
