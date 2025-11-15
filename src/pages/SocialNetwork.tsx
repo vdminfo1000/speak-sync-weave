@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Heart, MessageCircle, Share2, Search, Home, User, Bookmark, Image as ImageIcon } from "lucide-react";
+import { ArrowLeft, Heart, MessageCircle, Share2, Search, Home, User, Bookmark, Bell } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -14,6 +14,7 @@ import { ru } from "date-fns/locale";
 import { StoriesBar } from "@/components/StoriesBar";
 import { PostComments } from "@/components/PostComments";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { NotificationsPanel } from "@/components/NotificationsPanel";
 
 const SocialNetwork = () => {
   const navigate = useNavigate();
@@ -21,6 +22,8 @@ const SocialNetwork = () => {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [showComments, setShowComments] = useState<string | null>(null);
   const [followingUsers, setFollowingUsers] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<any[]>([]);
 
   useEffect(() => {
     const loadFollowing = async () => {
@@ -39,6 +42,42 @@ const SocialNetwork = () => {
     loadFollowing();
   }, []);
 
+  const handleHashtagSearch = async () => {
+    if (!searchQuery.trim()) {
+      setSearchResults([]);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('social_posts')
+      .select(`
+        *,
+        profiles (username, full_name, avatar_url),
+        social_likes (user_id),
+        social_comments (id),
+        saved_posts (user_id)
+      `)
+      .ilike('content', `%${searchQuery}%`)
+      .order('created_at', { ascending: false });
+
+    if (!error && data) {
+      setSearchResults(data);
+    }
+  };
+
+  const popularPosts = posts
+    ?.slice()
+    .sort((a, b) => {
+      const aLikes = a.social_likes?.length || 0;
+      const bLikes = b.social_likes?.length || 0;
+      return bLikes - aLikes;
+    })
+    .slice(0, 20);
+
+  const followingPosts = posts?.filter(post => 
+    followingUsers.has(post.user_id)
+  );
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -49,7 +88,10 @@ const SocialNetwork = () => {
           </Button>
           <h1 className="text-xl font-bold">Социальная сеть</h1>
         </div>
-        <CreatePostDialog onCreatePost={createPost} />
+        <div className="flex items-center gap-2">
+          <NotificationsPanel />
+          <CreatePostDialog onCreatePost={createPost} />
+        </div>
       </div>
 
       {/* Stories */}
@@ -65,10 +107,19 @@ const SocialNetwork = () => {
                   <Home className="w-4 h-4 mr-2" />
                   Главная
                 </Button>
-                <Button variant="ghost" className="w-full justify-start">
-                  <Search className="w-4 h-4 mr-2" />
-                  Поиск
-                </Button>
+                <div className="p-2">
+                  <div className="flex gap-2">
+                    <Input 
+                      placeholder="Поиск по хештегам..." 
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && handleHashtagSearch()}
+                    />
+                    <Button size="icon" onClick={handleHashtagSearch}>
+                      <Search className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
                 <Button variant="ghost" className="w-full justify-start" onClick={() => navigate("/profile")}>
                   <User className="w-4 h-4 mr-2" />
                   Профиль
@@ -104,6 +155,7 @@ const SocialNetwork = () => {
                 <TabsTrigger value="feed" className="flex-1">Лента</TabsTrigger>
                 <TabsTrigger value="popular" className="flex-1">Популярное</TabsTrigger>
                 <TabsTrigger value="following" className="flex-1">Подписки</TabsTrigger>
+                {searchQuery && <TabsTrigger value="search" className="flex-1">Поиск</TabsTrigger>}
               </TabsList>
               
               <TabsContent value="feed" className="space-y-4 mt-4">
@@ -219,21 +271,306 @@ const SocialNetwork = () => {
                 )}
               </TabsContent>
               
-              <TabsContent value="popular" className="mt-4">
-                <Card>
-                  <CardContent className="p-8 text-center">
-                    <p className="text-muted-foreground">Популярные посты появятся здесь</p>
-                  </CardContent>
-                </Card>
+              <TabsContent value="popular" className="space-y-4 mt-4">
+                {popularPosts && popularPosts.length > 0 ? (
+                  popularPosts.map((post) => {
+                    const isLiked = post.social_likes?.some(like => like.user_id === currentUserId);
+                    const isSaved = post.saved_posts?.some(save => save.user_id === currentUserId);
+                    const likesCount = post.social_likes?.length || 0;
+                    const commentsCount = post.social_comments?.length || 0;
+                    const isFollowing = followingUsers.has(post.user_id);
+                    const isOwnPost = post.user_id === currentUserId;
+                    
+                    return (
+                      <Card key={post.id}>
+                        <CardHeader className="pb-3">
+                          <div className="flex items-center gap-3">
+                            <Avatar>
+                              <AvatarImage src={post.profiles?.avatar_url || ""} />
+                              <AvatarFallback>
+                                {post.profiles?.full_name?.[0] || post.profiles?.username?.[0] || "U"}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1">
+                              <p className="font-semibold">
+                                {post.profiles?.full_name || post.profiles?.username || "Пользователь"}
+                              </p>
+                              <p className="text-sm text-muted-foreground">
+                                {formatDistanceToNow(new Date(post.created_at), { addSuffix: true, locale: ru })}
+                              </p>
+                            </div>
+                            {!isOwnPost && (
+                              <Button
+                                size="sm"
+                                variant={isFollowing ? "outline" : "default"}
+                                onClick={() => {
+                                  toggleFollow({ userId: post.user_id, isFollowing });
+                                  setFollowingUsers(prev => {
+                                    const newSet = new Set(prev);
+                                    if (isFollowing) {
+                                      newSet.delete(post.user_id);
+                                    } else {
+                                      newSet.add(post.user_id);
+                                    }
+                                    return newSet;
+                                  });
+                                }}
+                              >
+                                {isFollowing ? "Отписаться" : "Подписаться"}
+                              </Button>
+                            )}
+                          </div>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <p>{post.content}</p>
+                          {post.image_url && (
+                            <div className="rounded-lg overflow-hidden">
+                              <img src={post.image_url} alt="Post" className="w-full" />
+                            </div>
+                          )}
+                          <div className="flex items-center gap-4 pt-2">
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => toggleLike({ postId: post.id, isLiked })}
+                              className={isLiked ? "text-red-500" : ""}
+                            >
+                              <Heart className={`w-4 h-4 mr-1 ${isLiked ? "fill-current" : ""}`} />
+                              {likesCount}
+                            </Button>
+                            <Dialog>
+                              <DialogTrigger asChild>
+                                <Button variant="ghost" size="sm" onClick={() => setShowComments(post.id)}>
+                                  <MessageCircle className="w-4 h-4 mr-1" />
+                                  {commentsCount}
+                                </Button>
+                              </DialogTrigger>
+                              <DialogContent className="max-w-2xl">
+                                <DialogHeader>
+                                  <DialogTitle>Комментарии</DialogTitle>
+                                </DialogHeader>
+                                <PostComments postId={post.id} />
+                              </DialogContent>
+                            </Dialog>
+                            <Button variant="ghost" size="sm">
+                              <Share2 className="w-4 h-4 mr-1" />
+                              Поделиться
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => savePost({ postId: post.id, isSaved })}
+                              className={isSaved ? "text-primary" : ""}
+                            >
+                              <Bookmark className={`w-4 h-4 ${isSaved ? "fill-current" : ""}`} />
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })
+                ) : (
+                  <Card>
+                    <CardContent className="p-8 text-center">
+                      <p className="text-muted-foreground">Популярных постов пока нет</p>
+                    </CardContent>
+                  </Card>
+                )}
               </TabsContent>
 
-              <TabsContent value="following" className="mt-4">
-                <Card>
-                  <CardContent className="p-8 text-center">
-                    <p className="text-muted-foreground">Посты от ваших подписок появятся здесь</p>
-                  </CardContent>
-                </Card>
+              <TabsContent value="following" className="space-y-4 mt-4">
+                {followingPosts && followingPosts.length > 0 ? (
+                  followingPosts.map((post) => {
+                    const isLiked = post.social_likes?.some(like => like.user_id === currentUserId);
+                    const isSaved = post.saved_posts?.some(save => save.user_id === currentUserId);
+                    const likesCount = post.social_likes?.length || 0;
+                    const commentsCount = post.social_comments?.length || 0;
+                    
+                    return (
+                      <Card key={post.id}>
+                        <CardHeader className="pb-3">
+                          <div className="flex items-center gap-3">
+                            <Avatar>
+                              <AvatarImage src={post.profiles?.avatar_url || ""} />
+                              <AvatarFallback>
+                                {post.profiles?.full_name?.[0] || post.profiles?.username?.[0] || "U"}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1">
+                              <p className="font-semibold">
+                                {post.profiles?.full_name || post.profiles?.username || "Пользователь"}
+                              </p>
+                              <p className="text-sm text-muted-foreground">
+                                {formatDistanceToNow(new Date(post.created_at), { addSuffix: true, locale: ru })}
+                              </p>
+                            </div>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <p>{post.content}</p>
+                          {post.image_url && (
+                            <div className="rounded-lg overflow-hidden">
+                              <img src={post.image_url} alt="Post" className="w-full" />
+                            </div>
+                          )}
+                          <div className="flex items-center gap-4 pt-2">
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => toggleLike({ postId: post.id, isLiked })}
+                              className={isLiked ? "text-red-500" : ""}
+                            >
+                              <Heart className={`w-4 h-4 mr-1 ${isLiked ? "fill-current" : ""}`} />
+                              {likesCount}
+                            </Button>
+                            <Dialog>
+                              <DialogTrigger asChild>
+                                <Button variant="ghost" size="sm" onClick={() => setShowComments(post.id)}>
+                                  <MessageCircle className="w-4 h-4 mr-1" />
+                                  {commentsCount}
+                                </Button>
+                              </DialogTrigger>
+                              <DialogContent className="max-w-2xl">
+                                <DialogHeader>
+                                  <DialogTitle>Комментарии</DialogTitle>
+                                </DialogHeader>
+                                <PostComments postId={post.id} />
+                              </DialogContent>
+                            </Dialog>
+                            <Button variant="ghost" size="sm">
+                              <Share2 className="w-4 h-4 mr-1" />
+                              Поделиться
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => savePost({ postId: post.id, isSaved })}
+                              className={isSaved ? "text-primary" : ""}
+                            >
+                              <Bookmark className={`w-4 h-4 ${isSaved ? "fill-current" : ""}`} />
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })
+                ) : (
+                  <Card>
+                    <CardContent className="p-8 text-center">
+                      <p className="text-muted-foreground">Подпишитесь на пользователей, чтобы видеть их посты здесь</p>
+                    </CardContent>
+                  </Card>
+                )}
               </TabsContent>
+
+              {searchQuery && (
+                <TabsContent value="search" className="space-y-4 mt-4">
+                  {searchResults.length > 0 ? (
+                    searchResults.map((post) => {
+                      const isLiked = post.social_likes?.some(like => like.user_id === currentUserId);
+                      const isSaved = post.saved_posts?.some(save => save.user_id === currentUserId);
+                      const likesCount = post.social_likes?.length || 0;
+                      const commentsCount = post.social_comments?.length || 0;
+                      const isFollowing = followingUsers.has(post.user_id);
+                      const isOwnPost = post.user_id === currentUserId;
+                      
+                      return (
+                        <Card key={post.id}>
+                          <CardHeader className="pb-3">
+                            <div className="flex items-center gap-3">
+                              <Avatar>
+                                <AvatarImage src={post.profiles?.avatar_url || ""} />
+                                <AvatarFallback>
+                                  {post.profiles?.full_name?.[0] || post.profiles?.username?.[0] || "U"}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="flex-1">
+                                <p className="font-semibold">
+                                  {post.profiles?.full_name || post.profiles?.username || "Пользователь"}
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                  {formatDistanceToNow(new Date(post.created_at), { addSuffix: true, locale: ru })}
+                                </p>
+                              </div>
+                              {!isOwnPost && (
+                                <Button
+                                  size="sm"
+                                  variant={isFollowing ? "outline" : "default"}
+                                  onClick={() => {
+                                    toggleFollow({ userId: post.user_id, isFollowing });
+                                    setFollowingUsers(prev => {
+                                      const newSet = new Set(prev);
+                                      if (isFollowing) {
+                                        newSet.delete(post.user_id);
+                                      } else {
+                                        newSet.add(post.user_id);
+                                      }
+                                      return newSet;
+                                    });
+                                  }}
+                                >
+                                  {isFollowing ? "Отписаться" : "Подписаться"}
+                                </Button>
+                              )}
+                            </div>
+                          </CardHeader>
+                          <CardContent className="space-y-3">
+                            <p>{post.content}</p>
+                            {post.image_url && (
+                              <div className="rounded-lg overflow-hidden">
+                                <img src={post.image_url} alt="Post" className="w-full" />
+                              </div>
+                            )}
+                            <div className="flex items-center gap-4 pt-2">
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                onClick={() => toggleLike({ postId: post.id, isLiked })}
+                                className={isLiked ? "text-red-500" : ""}
+                              >
+                                <Heart className={`w-4 h-4 mr-1 ${isLiked ? "fill-current" : ""}`} />
+                                {likesCount}
+                              </Button>
+                              <Dialog>
+                                <DialogTrigger asChild>
+                                  <Button variant="ghost" size="sm" onClick={() => setShowComments(post.id)}>
+                                    <MessageCircle className="w-4 h-4 mr-1" />
+                                    {commentsCount}
+                                  </Button>
+                                </DialogTrigger>
+                                <DialogContent className="max-w-2xl">
+                                  <DialogHeader>
+                                    <DialogTitle>Комментарии</DialogTitle>
+                                  </DialogHeader>
+                                  <PostComments postId={post.id} />
+                                </DialogContent>
+                              </Dialog>
+                              <Button variant="ghost" size="sm">
+                                <Share2 className="w-4 h-4 mr-1" />
+                                Поделиться
+                              </Button>
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                onClick={() => savePost({ postId: post.id, isSaved })}
+                                className={isSaved ? "text-primary" : ""}
+                              >
+                                <Bookmark className={`w-4 h-4 ${isSaved ? "fill-current" : ""}`} />
+                              </Button>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })
+                  ) : (
+                    <Card>
+                      <CardContent className="p-8 text-center">
+                        <p className="text-muted-foreground">Ничего не найдено по запросу "{searchQuery}"</p>
+                      </CardContent>
+                    </Card>
+                  )}
+                </TabsContent>
+              )}
             </Tabs>
           </div>
 

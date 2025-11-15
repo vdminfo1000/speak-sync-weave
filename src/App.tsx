@@ -9,6 +9,7 @@ import Messenger from "./pages/Messenger";
 import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
 import SocialNetwork from "./pages/SocialNetwork";
+import UserProfile from "./pages/UserProfile";
 import BusinessEnvironment from "./pages/BusinessEnvironment";
 import DocumentManagement from "./pages/DocumentManagement";
 import Wallet from "./pages/Wallet";
@@ -30,7 +31,8 @@ const App = () => (
           <Route path="/auth" element={<Auth />} />
           <Route path="/messenger" element={<Messenger />} />
           <Route path="/profile" element={<Profile />} />
-          <Route path="/social-network" element={<SocialNetwork />} />
+        <Route path="/social-network" element={<SocialNetwork />} />
+        <Route path="/user/:userId" element={<UserProfile />} />
           <Route path="/business-environment" element={<BusinessEnvironment />} />
           <Route path="/document-management" element={<DocumentManagement />} />
           <Route path="/wallet" element={<Wallet />} />
