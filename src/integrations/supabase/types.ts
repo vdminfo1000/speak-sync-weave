@@ -127,6 +127,7 @@ export type Database = {
           allow_reactions: boolean | null
           chat_type: string | null
           created_at: string | null
+          description: string | null
           id: string
           is_group: boolean | null
           is_public: boolean | null
@@ -139,6 +140,7 @@ export type Database = {
           allow_reactions?: boolean | null
           chat_type?: string | null
           created_at?: string | null
+          description?: string | null
           id?: string
           is_group?: boolean | null
           is_public?: boolean | null
@@ -151,6 +153,7 @@ export type Database = {
           allow_reactions?: boolean | null
           chat_type?: string | null
           created_at?: string | null
+          description?: string | null
           id?: string
           is_group?: boolean | null
           is_public?: boolean | null
