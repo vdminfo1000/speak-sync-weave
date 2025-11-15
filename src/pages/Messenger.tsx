@@ -322,57 +322,38 @@ const Messenger = () => {
 
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="p-4 space-y-2">
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-              <DialogTrigger asChild>
-                <Button className="w-full">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Новый чат
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Отправить запрос на чат</DialogTitle>
-                </DialogHeader>
-                <ContactSearch
-                  onSelectContact={(profile) => sendChatRequest(profile.id)}
-                  currentUserId={currentUserId}
-                />
-              </DialogContent>
-            </Dialog>
+            {/* Icon buttons row */}
+            <div className="flex gap-2 mb-2">
+              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button size="icon" variant="outline" title="Новый чат">
+                    <Plus className="w-4 h-4" />
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Отправить запрос на чат</DialogTitle>
+                  </DialogHeader>
+                  <ContactSearch
+                    onSelectContact={(profile) => sendChatRequest(profile.id)}
+                    currentUserId={currentUserId}
+                  />
+                </DialogContent>
+              </Dialog>
 
-            <Button 
-              variant="outline" 
-              className="w-full" 
-              onClick={() => navigate("/social-network")}
-            >
-              <MessageCircle className="w-4 h-4 mr-2" />
-              Социальная сеть
-            </Button>
-
-            <Button 
-              variant="outline" 
-              className="w-full" 
-              onClick={() => setIsPublicChannelsOpen(true)}
-            >
-              <Radio className="w-4 h-4 mr-2" />
-              Публичные каналы
-            </Button>
-
-            <div className="flex gap-2">
               <Button 
+                size="icon" 
                 variant="outline" 
-                className="flex-1" 
                 onClick={() => setIsCreateGroupOpen(true)}
+                title="Создать группу"
               >
-                <Users className="w-4 h-4 mr-2" />
-                Создать группу
+                <Users className="w-4 h-4" />
               </Button>
 
               <Dialog open={isRequestsOpen} onOpenChange={setIsRequestsOpen}>
                 <DialogTrigger asChild>
-                  <Button variant="outline" className="flex-1 relative">
-                    <Bell className="w-4 h-4 mr-2" />
-                    Запросы
+                  <Button size="icon" variant="outline" className="relative" title="Запросы">
+                    <Bell className="w-4 h-4" />
                     {pendingRequestsCount > 0 && (
                       <Badge 
                         variant="destructive" 
@@ -397,6 +378,25 @@ const Messenger = () => {
                 </DialogContent>
               </Dialog>
             </div>
+
+            {/* Text buttons */}
+            <Button 
+              variant="outline" 
+              className="w-full" 
+              onClick={() => navigate("/social-network")}
+            >
+              <MessageCircle className="w-4 h-4 mr-2" />
+              Социальная сеть
+            </Button>
+
+            <Button 
+              variant="outline" 
+              className="w-full" 
+              onClick={() => setIsPublicChannelsOpen(true)}
+            >
+              <Radio className="w-4 h-4 mr-2" />
+              Публичные каналы
+            </Button>
           </div>
 
           <div className="flex-1 overflow-hidden">
