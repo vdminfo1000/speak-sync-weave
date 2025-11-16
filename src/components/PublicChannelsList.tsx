@@ -365,6 +365,20 @@ const PublicChannelsList = ({
                                 <Users className="w-4 h-4" />
                               </Button>
                             </>
+                           ) : channel.user_role === "admin" ? (
+                            <>
+                              <Badge variant="secondary" className="gap-1">
+                                <Users className="w-3 h-3" />
+                                Администратор
+                              </Badge>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={(e) => handleLeaveChannel(channel.id, e)}
+                              >
+                                <UserMinus className="w-4 h-4" />
+                              </Button>
+                            </>
                           ) : channel.user_role ? (
                             <div className="flex flex-col gap-1">
                               <Badge variant="secondary">Подписан</Badge>
