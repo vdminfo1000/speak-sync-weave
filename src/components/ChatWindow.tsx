@@ -669,7 +669,7 @@ const ChatWindow = ({ chatId, onBack, onStartCall }: ChatWindowProps) => {
               >
                 <Users className="w-5 h-5" />
               </Button>
-              {chatType === "channel" && currentUserRole === "owner" && (
+              {chatType === "channel" && (currentUserRole === "owner" || currentUserRole === "admin") && (
                 <>
                   <Button 
                     variant="ghost" 
@@ -679,14 +679,16 @@ const ChatWindow = ({ chatId, onBack, onStartCall }: ChatWindowProps) => {
                   >
                     <Settings2 className="w-5 h-5" />
                   </Button>
-                  <Button 
-                    variant="ghost" 
-                    size="icon"
-                    onClick={() => setShowOwnerSettings(true)}
-                    title="Управление владением"
-                  >
-                    <Crown className="w-5 h-5" />
-                  </Button>
+                  {currentUserRole === "owner" && (
+                    <Button 
+                      variant="ghost" 
+                      size="icon"
+                      onClick={() => setShowOwnerSettings(true)}
+                      title="Управление владением"
+                    >
+                      <Crown className="w-5 h-5" />
+                    </Button>
+                  )}
                 </>
               )}
             </>
