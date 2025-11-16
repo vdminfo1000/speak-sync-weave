@@ -38,29 +38,39 @@ const CallHistory = ({ isOpen, onClose, currentUserId }: CallHistoryProps) => {
   const loadCallHistory = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      const { data: callsData, error } = await supabase
         .from("call_history")
-        .select(`
-          *,
-          caller:profiles!call_history_caller_id_fkey(username, full_name),
-          receiver:profiles!call_history_receiver_id_fkey(username, full_name)
-        `)
+        .select("*")
         .or(`caller_id.eq.${currentUserId},receiver_id.eq.${currentUserId}`)
         .order("created_at", { ascending: false })
         .limit(100);
 
       if (error) throw error;
 
-      const formattedCalls = data?.map((call: any) => ({
+      // Fetch profiles separately
+      const userIds = new Set<string>();
+      callsData?.forEach(call => {
+        userIds.add(call.caller_id);
+        userIds.add(call.receiver_id);
+      });
+
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, username, full_name")
+        .in("id", Array.from(userIds));
+
+      const profileMap = new Map(profiles?.map(p => [p.id, p]) || []);
+
+      const formattedCalls = callsData?.map((call) => ({
         id: call.id,
         caller_id: call.caller_id,
         receiver_id: call.receiver_id,
-        call_type: call.call_type,
-        status: call.status,
+        call_type: call.call_type as "video" | "audio" | "group-video" | "group-audio",
+        status: call.status as "completed" | "missed" | "declined" | "no-answer",
         started_at: call.started_at,
         duration: call.duration || 0,
-        caller_name: call.caller?.full_name || call.caller?.username || "Неизвестно",
-        receiver_name: call.receiver?.full_name || call.receiver?.username || "Неизвестно",
+        caller_name: profileMap.get(call.caller_id)?.full_name || profileMap.get(call.caller_id)?.username || "Неизвестно",
+        receiver_name: profileMap.get(call.receiver_id)?.full_name || profileMap.get(call.receiver_id)?.username || "Неизвестно",
       })) || [];
 
       setCalls(formattedCalls);

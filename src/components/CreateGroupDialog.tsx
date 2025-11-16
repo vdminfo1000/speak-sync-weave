@@ -165,21 +165,23 @@ const CreateGroupDialog = ({
         return;
       }
 
-      // Then add other members
-      const otherMembers = Array.from(selectedContacts).map((contactId) => ({
-        chat_id: chat.id,
-        user_id: contactId,
-        role: "member" as const,
-      }));
+      // Then add other members if any selected
+      if (selectedContacts.size > 0) {
+        const otherMembers = Array.from(selectedContacts).map((contactId) => ({
+          chat_id: chat.id,
+          user_id: contactId,
+          role: "member" as const,
+        }));
 
-      const { error: membersError } = await supabase
-        .from("chat_members")
-        .insert(otherMembers);
+        const { error: membersError } = await supabase
+          .from("chat_members")
+          .insert(otherMembers);
 
-      if (membersError) {
-        console.error("Error adding members:", membersError);
-        toast.error("Ошибка при добавлении участников");
-        return;
+        if (membersError) {
+          console.error("Error adding members:", membersError);
+          toast.error("Ошибка при добавлении участников");
+          return;
+        }
       }
 
       toast.success("Группа создана");

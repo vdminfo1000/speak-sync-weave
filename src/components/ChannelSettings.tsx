@@ -26,6 +26,7 @@ const ChannelSettings = ({
   const [allowComments, setAllowComments] = useState(true);
   const [allowReactions, setAllowReactions] = useState(true);
   const [allowFileUploads, setAllowFileUploads] = useState(true);
+  const [allowMemberMessages, setAllowMemberMessages] = useState(true);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -38,7 +39,7 @@ const ChannelSettings = ({
     try {
       const { data, error } = await supabase
         .from("chats")
-        .select("allow_comments, allow_reactions, allow_file_uploads")
+        .select("allow_comments, allow_reactions, allow_file_uploads, allow_member_messages")
         .eq("id", chatId)
         .single();
 
@@ -48,6 +49,7 @@ const ChannelSettings = ({
         setAllowComments(data.allow_comments ?? true);
         setAllowReactions(data.allow_reactions ?? true);
         setAllowFileUploads(data.allow_file_uploads ?? true);
+        setAllowMemberMessages(data.allow_member_messages ?? true);
       }
     } catch (error) {
       console.error("Error loading settings:", error);
@@ -63,6 +65,7 @@ const ChannelSettings = ({
           allow_comments: allowComments,
           allow_reactions: allowReactions,
           allow_file_uploads: allowFileUploads,
+          allow_member_messages: allowMemberMessages,
         })
         .eq("id", chatId);
 
@@ -121,13 +124,27 @@ const ChannelSettings = ({
             <div className="space-y-0.5">
               <Label htmlFor="files">Отправка файлов</Label>
               <p className="text-xs text-muted-foreground">
-                Разрешить участникам отправлять файлы
+                Разрешить загрузку файлов и медиа
               </p>
             </div>
             <Switch
               id="files"
               checked={allowFileUploads}
               onCheckedChange={setAllowFileUploads}
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor="member-messages">Сообщения участников</Label>
+              <p className="text-xs text-muted-foreground">
+                Разрешить подписчикам отправлять сообщения в канал
+              </p>
+            </div>
+            <Switch
+              id="member-messages"
+              checked={allowMemberMessages}
+              onCheckedChange={setAllowMemberMessages}
             />
           </div>
         </div>
