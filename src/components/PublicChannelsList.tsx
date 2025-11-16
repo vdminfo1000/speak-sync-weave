@@ -254,7 +254,7 @@ const PublicChannelsList = ({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-6xl max-h-[90vh] p-0 sm:p-6">
+        <DialogContent className="max-w-6xl w-full max-h-[90vh] p-0 sm:p-6">
           {isMobile && selectedChannelId && (
             <Button
               variant="ghost"
@@ -267,39 +267,26 @@ const PublicChannelsList = ({
             </Button>
           )}
           <DialogHeader className="px-4 sm:px-0">
-            <DialogTitle className="flex items-center justify-between">
+            <DialogTitle className="flex items-center justify-between gap-2 flex-wrap">
               <div className="flex items-center gap-2">
                 <Radio className="w-5 h-5" />
-                {showMyChannels ? "Мои каналы" : showSubscriptions ? "Подписки" : "Публичные каналы"}
+                Каналы
               </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant={!showMyChannels && !showSubscriptions ? "default" : "outline"}
-                  onClick={() => handleFilterChange("all")}
+              <div className="flex items-center gap-2 flex-wrap">
+                <select
+                  className="px-3 py-1.5 text-sm rounded-md border border-input bg-background hover:bg-accent transition-colors"
+                  value={showMyChannels ? "my" : showSubscriptions ? "subscriptions" : "all"}
+                  onChange={(e) => handleFilterChange(e.target.value as "all" | "my" | "subscriptions")}
                 >
-                  Все каналы
-                </Button>
-                <Button
-                  size="sm"
-                  variant={showSubscriptions ? "default" : "outline"}
-                  onClick={() => handleFilterChange("subscriptions")}
-                >
-                  Подписки
-                </Button>
-                <Button
-                  size="sm"
-                  variant={showMyChannels ? "default" : "outline"}
-                  onClick={() => handleFilterChange("my")}
-                >
-                  Мои каналы
-                </Button>
+                  <option value="all">Все каналы</option>
+                  <option value="subscriptions">Подписки</option>
+                  <option value="my">Мои каналы</option>
+                </select>
                 <Button
                   size="sm"
                   onClick={() => setIsCreateChannelOpen(true)}
                 >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Создать
+                  <Plus className="w-4 h-4" />
                 </Button>
               </div>
             </DialogTitle>
