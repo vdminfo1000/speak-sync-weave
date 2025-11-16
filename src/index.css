@@ -96,4 +96,15 @@ All colors MUST be HSL.
   body {
     @apply bg-background text-foreground;
   }
+
+  /* Mobile optimization - prevent address bar from covering content */
+  @supports (-webkit-touch-callout: none) {
+    body {
+      min-height: -webkit-fill-available;
+    }
+  }
+
+  html {
+    height: -webkit-fill-available;
+  }
 }

@@ -11,12 +11,13 @@ import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { Search, Radio, Users, Plus, Settings, Crown } from "lucide-react";
+import { Search, Radio, Users, Plus, Settings, Crown, ArrowLeft, UserMinus } from "lucide-react";
 import { toast } from "sonner";
 import CreateChannelDialog from "./CreateChannelDialog";
 import ChatWindow from "./ChatWindow";
 import ChannelSettings from "./ChannelSettings";
 import ChannelAdminSettings from "./ChannelAdminSettings";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface Channel {
   id: string;
@@ -51,6 +52,7 @@ const PublicChannelsList = ({
   const [isChannelSettingsOpen, setIsChannelSettingsOpen] = useState(false);
   const [isAdminSettingsOpen, setIsAdminSettingsOpen] = useState(false);
   const [settingsChannelId, setSettingsChannelId] = useState<string>("");
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     if (open) {
@@ -195,11 +197,36 @@ const PublicChannelsList = ({
       if (error) throw error;
 
       toast.success("Вы присоединились к каналу");
+      loadChannels(); // Reload to update UI
       onChannelJoin(channelId);
-      onOpenChange(false);
     } catch (error) {
       console.error("Error joining channel:", error);
       toast.error("Ошибка при присоединении к каналу");
+    }
+  };
+
+  const handleLeaveChannel = async (channelId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { error } = await supabase
+        .from("chat_members")
+        .delete()
+        .eq("chat_id", channelId)
+        .eq("user_id", user.id);
+
+      if (error) throw error;
+
+      toast.success("Вы отписались от канала");
+      loadChannels();
+      if (selectedChannelId === channelId) {
+        setSelectedChannelId(null);
+      }
+    } catch (error) {
+      console.error("Error leaving channel:", error);
+      toast.error("Ошибка при отписке от канала");
     }
   };
 
@@ -227,8 +254,19 @@ const PublicChannelsList = ({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-6xl max-h-[90vh]">
-          <DialogHeader>
+        <DialogContent className="max-w-6xl max-h-[90vh] p-0 sm:p-6">
+          {isMobile && selectedChannelId && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSelectedChannelId(null)}
+              className="absolute top-2 left-2 z-50"
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Назад
+            </Button>
+          )}
+          <DialogHeader className="px-4 sm:px-0">
             <DialogTitle className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Radio className="w-5 h-5" />
@@ -267,7 +305,7 @@ const PublicChannelsList = ({
             </DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <div className="space-y-4 px-4 sm:px-0">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
@@ -278,8 +316,8 @@ const PublicChannelsList = ({
               />
             </div>
 
-          <div className="grid grid-cols-2 gap-4 h-[600px]">
-            <ScrollArea className="h-full border-r pr-4">
+          <div className={`grid ${isMobile ? 'grid-cols-1' : 'grid-cols-2'} gap-4 h-[600px]`}>
+            <ScrollArea className={`h-full ${!isMobile && 'border-r pr-4'} ${isMobile && selectedChannelId ? 'hidden' : 'block'}`}>
               {loading ? (
                 <div className="flex justify-center items-center h-32">
                   <p className="text-muted-foreground">Загрузка...</p>
@@ -341,7 +379,16 @@ const PublicChannelsList = ({
                               </Button>
                             </>
                           ) : channel.user_role ? (
-                            <Badge variant="secondary">Подписан</Badge>
+                            <div className="flex flex-col gap-1">
+                              <Badge variant="secondary">Подписан</Badge>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={(e) => handleLeaveChannel(channel.id, e)}
+                              >
+                                <UserMinus className="w-4 h-4" />
+                              </Button>
+                            </div>
                           ) : (
                             <Button
                               size="sm"
@@ -361,7 +408,7 @@ const PublicChannelsList = ({
               )}
             </ScrollArea>
 
-            <div className="h-full">
+            <div className={`h-full ${isMobile && !selectedChannelId ? 'hidden' : 'block'}`}>
               {selectedChannelId ? (
                 <ChatWindow
                   key={selectedChannelId}

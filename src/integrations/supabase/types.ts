@@ -163,6 +163,7 @@ export type Database = {
         Row: {
           allow_comments: boolean | null
           allow_file_uploads: boolean | null
+          allow_member_messages: boolean | null
           allow_reactions: boolean | null
           chat_type: string | null
           created_at: string | null
@@ -176,6 +177,7 @@ export type Database = {
         Insert: {
           allow_comments?: boolean | null
           allow_file_uploads?: boolean | null
+          allow_member_messages?: boolean | null
           allow_reactions?: boolean | null
           chat_type?: string | null
           created_at?: string | null
@@ -189,6 +191,7 @@ export type Database = {
         Update: {
           allow_comments?: boolean | null
           allow_file_uploads?: boolean | null
+          allow_member_messages?: boolean | null
           allow_reactions?: boolean | null
           chat_type?: string | null
           created_at?: string | null
@@ -776,6 +779,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      trusted_devices: {
+        Row: {
+          created_at: string | null
+          device_fingerprint: string
+          device_name: string | null
+          expires_at: string | null
+          id: string
+          last_used_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          device_fingerprint: string
+          device_name?: string | null
+          expires_at?: string | null
+          id?: string
+          last_used_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          device_fingerprint?: string
+          device_name?: string | null
+          expires_at?: string | null
+          id?: string
+          last_used_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
       }
       user_ringtones: {
         Row: {

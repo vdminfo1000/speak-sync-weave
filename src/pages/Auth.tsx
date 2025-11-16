@@ -8,6 +8,25 @@ import { toast } from "sonner";
 import { Shield, Lock } from "lucide-react";
 import { z } from "zod";
 import { getUserFriendlyError } from "@/lib/errorHandler";
+import { Checkbox } from "@/components/ui/checkbox";
+
+// Generate device fingerprint
+const getDeviceFingerprint = async (): Promise<string> => {
+  const data = [
+    navigator.userAgent,
+    navigator.language,
+    new Date().getTimezoneOffset(),
+    screen.width,
+    screen.height,
+    screen.colorDepth,
+  ].join("|");
+  
+  const encoder = new TextEncoder();
+  const dataBuffer = encoder.encode(data);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", dataBuffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+};
 
 // Input validation schemas
 const authSchema = z.object({
@@ -35,6 +54,7 @@ const Auth = () => {
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -78,6 +98,18 @@ const Auth = () => {
           password: validated.password,
         });
         if (error) throw error;
+        
+        // Save trusted device if "Remember Me" is checked
+        if (rememberMe) {
+          const deviceFingerprint = await getDeviceFingerprint();
+          await supabase.from("trusted_devices").upsert({
+            user_id: (await supabase.auth.getUser()).data.user?.id,
+            device_fingerprint: deviceFingerprint,
+            device_name: navigator.userAgent,
+            last_used_at: new Date().toISOString(),
+          });
+        }
+        
         toast.success("Вход выполнен успешно!");
       } else {
         const { error } = await supabase.auth.signUp({
@@ -198,6 +230,22 @@ const Auth = () => {
                 </p>
               )}
             </div>
+
+            {isLogin && (
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="remember"
+                  checked={rememberMe}
+                  onCheckedChange={(checked) => setRememberMe(checked as boolean)}
+                />
+                <label
+                  htmlFor="remember"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                >
+                  Запомнить это устройство
+                </label>
+              </div>
+            )}
 
             <Button
               type="submit"
