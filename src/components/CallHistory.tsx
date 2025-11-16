@@ -11,6 +11,7 @@ interface CallHistoryProps {
   isOpen: boolean;
   onClose: () => void;
   currentUserId: string;
+  onStartCall?: (params: { chatId: string; otherUserId: string; otherUserName: string; callType: "audio" | "video" }) => void;
 }
 
 interface CallRecord {
@@ -25,7 +26,7 @@ interface CallRecord {
   receiver_name?: string;
 }
 
-const CallHistory = ({ isOpen, onClose, currentUserId }: CallHistoryProps) => {
+const CallHistory = ({ isOpen, onClose, currentUserId, onStartCall }: CallHistoryProps) => {
   const [calls, setCalls] = useState<CallRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -107,6 +108,65 @@ const CallHistory = ({ isOpen, onClose, currentUserId }: CallHistoryProps) => {
     );
   };
 
+  const handleCallClick = async (call: CallRecord) => {
+    if (!onStartCall) return;
+
+    const isIncoming = call.receiver_id === currentUserId;
+    const otherUserId = isIncoming ? call.caller_id : call.receiver_id;
+    const otherUserName = isIncoming ? call.caller_name : call.receiver_name;
+
+    // Find or create a private chat with this user
+    try {
+      const { data: existingChats } = await supabase
+        .from("chat_members")
+        .select("chat_id, chats!inner(chat_type, is_group)")
+        .eq("user_id", currentUserId);
+
+      let chatId: string | null = null;
+
+      if (existingChats) {
+        // Find private chat with this user
+        for (const chat of existingChats) {
+          const { data: otherMember } = await supabase
+            .from("chat_members")
+            .select("user_id")
+            .eq("chat_id", chat.chat_id)
+            .eq("user_id", otherUserId)
+            .single();
+
+          if (otherMember) {
+            chatId = chat.chat_id;
+            break;
+          }
+        }
+      }
+
+      if (!chatId) {
+        // Create a new private chat
+        const { data: newChat, error } = await supabase
+          .from("chats")
+          .insert({ chat_type: "private", is_group: false })
+          .select()
+          .single();
+
+        if (error) throw error;
+        chatId = newChat.id;
+
+        // Add both users as members
+        await supabase.from("chat_members").insert([
+          { chat_id: chatId, user_id: currentUserId, role: "owner" },
+          { chat_id: chatId, user_id: otherUserId, role: "member" },
+        ]);
+      }
+
+      const callType = call.call_type.includes("video") ? "video" : "audio";
+      onStartCall({ chatId: chatId!, otherUserId, otherUserName: otherUserName!, callType });
+      onClose();
+    } catch (error) {
+      console.error("Error initiating call:", error);
+    }
+  };
+
   const getCallDescription = (call: CallRecord) => {
     const isIncoming = call.receiver_id === currentUserId;
     const contactName = isIncoming ? call.caller_name : call.receiver_name;
@@ -153,7 +213,8 @@ const CallHistory = ({ isOpen, onClose, currentUserId }: CallHistoryProps) => {
                 return (
                    <div
                      key={call.id}
-                     className="p-4 rounded-lg border border-border/50 hover:bg-muted/50 transition-colors"
+                     className="p-4 rounded-lg border border-border/50 hover:bg-muted/50 transition-colors cursor-pointer"
+                     onClick={() => handleCallClick(call)}
                    >
                      <div className="flex items-start gap-3">
                        <Avatar className="w-12 h-12">
