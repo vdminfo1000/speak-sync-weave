@@ -171,7 +171,7 @@ const GroupManagementDialog = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[80vh]">
         <DialogHeader>
-          <DialogTitle>
+          <DialogTitle className="pr-8">
             Управление {chatType === "channel" ? "каналом" : "группой"}
           </DialogTitle>
         </DialogHeader>

@@ -140,7 +140,7 @@ const ChannelAdminSettings = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+          <DialogTitle className="flex items-center gap-2 pr-8">
             <Shield className="w-5 h-5" />
             Управление администраторами
           </DialogTitle>

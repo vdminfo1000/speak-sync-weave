@@ -119,7 +119,7 @@ const InviteToGroupCallDialog = ({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>
+          <DialogTitle className="pr-8">
             Пригласить в групповой {callType === "video" ? "видеозвонок" : "звонок"}
           </DialogTitle>
         </DialogHeader>

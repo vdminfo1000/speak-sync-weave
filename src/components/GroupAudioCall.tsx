@@ -419,7 +419,7 @@ const GroupAudioCall = ({
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleEndCall()}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle className="flex items-center justify-between">
+          <DialogTitle className="flex items-center justify-between pr-8">
             <span>Групповой голосовой звонок</span>
             <span className="text-sm font-normal text-muted-foreground">
               {formatCallDuration(callDuration)}

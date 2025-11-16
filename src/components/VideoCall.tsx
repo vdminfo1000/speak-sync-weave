@@ -548,7 +548,7 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleEndCall()}>
       <DialogContent className="max-w-4xl">
         <DialogHeader>
-          <DialogTitle className="flex items-center justify-between">
+          <DialogTitle className="flex items-center justify-between pr-8">
             <span>Видеозвонок</span>
             <div className="flex items-center gap-2">
               <span className="text-sm font-normal text-muted-foreground">

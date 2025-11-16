@@ -454,7 +454,7 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleEndCall()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center justify-between">
+          <DialogTitle className="flex items-center justify-between pr-8">
             <span>Голосовой звонок</span>
             <Button
               variant="ghost"

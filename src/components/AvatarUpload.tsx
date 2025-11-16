@@ -183,7 +183,7 @@ export const AvatarUpload = ({ currentAvatarUrl, userId, username, onAvatarUpdat
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Обрезать изображение</DialogTitle>
+            <DialogTitle className="pr-8">Обрезать изображение</DialogTitle>
             <DialogDescription>Перемещайте и масштабируйте, чтобы обрезать аватар.</DialogDescription>
           </DialogHeader>
           

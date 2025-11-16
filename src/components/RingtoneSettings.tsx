@@ -185,7 +185,7 @@ const RingtoneSettings = ({ isOpen, onClose, currentUserId, contactId, contactNa
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>
+          <DialogTitle className="pr-8">
             {contactName ? `Мелодия для ${contactName}` : "Настройки мелодий"}
           </DialogTitle>
         </DialogHeader>
