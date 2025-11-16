@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Dialog,
@@ -17,16 +17,10 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Crown, Trash2, Shield } from "lucide-react";
+import { Crown, Trash2, Shield, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
-import ChannelAdminSettings from "./ChannelAdminSettings";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface ChannelOwnerSettingsProps {
   open: boolean;
@@ -42,8 +36,11 @@ interface Member {
   profile: {
     username: string;
     full_name: string | null;
+    avatar_url: string | null;
   };
 }
+
+type ViewMode = "main" | "transfer" | "admins";
 
 const ChannelOwnerSettings = ({
   open,
@@ -53,10 +50,17 @@ const ChannelOwnerSettings = ({
 }: ChannelOwnerSettingsProps) => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showTransferConfirm, setShowTransferConfirm] = useState(false);
-  const [showAdminSettings, setShowAdminSettings] = useState(false);
+  const [showAdminConfirm, setShowAdminConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [members, setMembers] = useState<Member[]>([]);
-  const [selectedNewOwner, setSelectedNewOwner] = useState<string>("");
+  const [selectedMember, setSelectedMember] = useState<Member | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>("main");
+
+  useEffect(() => {
+    if (open && (viewMode === "transfer" || viewMode === "admins")) {
+      loadMembers();
+    }
+  }, [open, viewMode, chatId]);
 
   const loadMembers = async () => {
     try {
@@ -68,7 +72,8 @@ const ChannelOwnerSettings = ({
           role,
           profile:user_id (
             username,
-            full_name
+            full_name,
+            avatar_url
           )
         `)
         .eq("chat_id", chatId)
@@ -85,7 +90,6 @@ const ChannelOwnerSettings = ({
   const handleDeleteChannel = async () => {
     setLoading(true);
     try {
-      // Delete all chat members first
       const { error: membersError } = await supabase
         .from("chat_members")
         .delete()
@@ -93,7 +97,6 @@ const ChannelOwnerSettings = ({
 
       if (membersError) throw membersError;
 
-      // Delete all messages
       const { error: messagesError } = await supabase
         .from("messages")
         .delete()
@@ -101,7 +104,6 @@ const ChannelOwnerSettings = ({
 
       if (messagesError) throw messagesError;
 
-      // Delete the chat
       const { error: chatError } = await supabase
         .from("chats")
         .delete()
@@ -122,34 +124,30 @@ const ChannelOwnerSettings = ({
   };
 
   const handleTransferOwnership = async () => {
-    if (!selectedNewOwner) {
-      toast.error("Выберите нового владельца");
-      return;
-    }
+    if (!selectedMember) return;
 
     setLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Не авторизован");
 
-      // Update current owner to admin
       const { error: currentOwnerError } = await supabase
         .from("chat_members")
-        .update({ role: "admin" })
+        .update({ role: "member" })
         .eq("chat_id", chatId)
         .eq("user_id", user.id);
 
       if (currentOwnerError) throw currentOwnerError;
 
-      // Update selected member to owner
       const { error: newOwnerError } = await supabase
         .from("chat_members")
         .update({ role: "owner" })
-        .eq("id", selectedNewOwner);
+        .eq("id", selectedMember.id);
 
       if (newOwnerError) throw newOwnerError;
 
       toast.success("Права владельца переданы");
+      setViewMode("main");
       onOpenChange(false);
     } catch (error) {
       console.error("Error transferring ownership:", error);
@@ -157,96 +155,227 @@ const ChannelOwnerSettings = ({
     } finally {
       setLoading(false);
       setShowTransferConfirm(false);
+      setSelectedMember(null);
     }
   };
 
-  const handleOpenAdminSettings = async () => {
-    await loadMembers();
-    setShowAdminSettings(true);
+  const handleToggleAdmin = async () => {
+    if (!selectedMember) return;
+
+    setLoading(true);
+    try {
+      const newRole = selectedMember.role === "admin" ? "member" : "admin";
+      
+      const { error } = await supabase
+        .from("chat_members")
+        .update({ role: newRole })
+        .eq("id", selectedMember.id);
+
+      if (error) throw error;
+
+      toast.success(
+        newRole === "admin" 
+          ? "Участник назначен администратором" 
+          : "Администратор снят с должности"
+      );
+      
+      await loadMembers();
+    } catch (error) {
+      console.error("Error toggling admin:", error);
+      toast.error("Ошибка при изменении статуса");
+    } finally {
+      setLoading(false);
+      setShowAdminConfirm(false);
+      setSelectedMember(null);
+    }
   };
 
-  const handleOpenTransferDialog = async () => {
-    await loadMembers();
-    setShowTransferConfirm(true);
+  const handleMemberClick = (member: Member) => {
+    setSelectedMember(member);
+    if (viewMode === "transfer") {
+      setShowTransferConfirm(true);
+    } else if (viewMode === "admins") {
+      setShowAdminConfirm(true);
+    }
   };
+
+  const handleClose = () => {
+    setViewMode("main");
+    onOpenChange(false);
+  };
+
+  const renderMainView = () => (
+    <div className="space-y-3 py-4">
+      <Button
+        variant="outline"
+        className="w-full justify-between"
+        onClick={() => setViewMode("transfer")}
+      >
+        <div className="flex items-center">
+          <Crown className="w-4 h-4 mr-2" />
+          Передать права владельца
+        </div>
+        <ChevronRight className="w-4 h-4" />
+      </Button>
+
+      <Button
+        variant="outline"
+        className="w-full justify-between"
+        onClick={() => setViewMode("admins")}
+      >
+        <div className="flex items-center">
+          <Shield className="w-4 h-4 mr-2" />
+          Управление администраторами
+        </div>
+        <ChevronRight className="w-4 h-4" />
+      </Button>
+
+      <Button
+        variant="destructive"
+        className="w-full justify-start"
+        onClick={() => setShowDeleteConfirm(true)}
+      >
+        <Trash2 className="w-4 h-4 mr-2" />
+        Удалить канал
+      </Button>
+    </div>
+  );
+
+  const renderMembersList = () => (
+    <div className="py-4">
+      <ScrollArea className="h-[400px] pr-4">
+        <div className="space-y-2">
+          {members.length === 0 ? (
+            <p className="text-center text-muted-foreground py-8">
+              Нет участников
+            </p>
+          ) : (
+            members.map((member) => (
+              <button
+                key={member.id}
+                onClick={() => handleMemberClick(member)}
+                className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-accent transition-colors"
+              >
+                <Avatar className="h-10 w-10">
+                  <AvatarImage src={member.profile?.avatar_url || undefined} />
+                  <AvatarFallback>
+                    {(member.profile?.full_name || member.profile?.username || "U")[0].toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1 text-left">
+                  <p className="font-medium">
+                    {member.profile?.full_name || member.profile?.username}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {member.role === "admin" ? "Администратор" : "Участник"}
+                  </p>
+                </div>
+                <ChevronRight className="w-5 h-5 text-muted-foreground" />
+              </button>
+            ))
+          )}
+        </div>
+      </ScrollArea>
+    </div>
+  );
 
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
+      <Dialog open={open} onOpenChange={handleClose}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 pr-8">
-              <Crown className="w-5 h-5" />
-              Управление владением
+              {viewMode === "main" && (
+                <>
+                  <Crown className="w-5 h-5" />
+                  Управление каналом
+                </>
+              )}
+              {viewMode === "transfer" && (
+                <>
+                  <Crown className="w-5 h-5" />
+                  Передать права владельца
+                </>
+              )}
+              {viewMode === "admins" && (
+                <>
+                  <Shield className="w-5 h-5" />
+                  Управление администраторами
+                </>
+              )}
             </DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-3 py-4">
-            <Button
-              variant="outline"
-              className="w-full justify-start"
-              onClick={handleOpenAdminSettings}
-            >
-              <Shield className="w-4 h-4 mr-2" />
-              Управление администраторами
-            </Button>
+          {viewMode === "main" && renderMainView()}
+          {(viewMode === "transfer" || viewMode === "admins") && renderMembersList()}
 
-            <Button
-              variant="outline"
-              className="w-full justify-start"
-              onClick={handleOpenTransferDialog}
-            >
-              <Crown className="w-4 h-4 mr-2" />
-              Передать права владельца
-            </Button>
-
-            <Button
-              variant="destructive"
-              className="w-full justify-start"
-              onClick={() => setShowDeleteConfirm(true)}
-            >
-              <Trash2 className="w-4 h-4 mr-2" />
-              Удалить канал
-            </Button>
-          </div>
+          {viewMode !== "main" && (
+            <div className="flex justify-end pt-2">
+              <Button variant="outline" onClick={() => setViewMode("main")}>
+                Назад
+              </Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
-
-      <ChannelAdminSettings
-        open={showAdminSettings}
-        onOpenChange={setShowAdminSettings}
-        chatId={chatId}
-      />
 
       <AlertDialog open={showTransferConfirm} onOpenChange={setShowTransferConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="pr-8">Передать права владельца?</AlertDialogTitle>
             <AlertDialogDescription>
-              Вы передадите права владельца выбранному участнику. После этого вы станете администратором канала.
+              Вы передадите права владельца участнику{" "}
+              <strong>{selectedMember?.profile?.full_name || selectedMember?.profile?.username}</strong>.
+              После этого вы станете обычным участником канала и потеряете доступ к настройкам владельца.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <div className="py-4">
-            <Select value={selectedNewOwner} onValueChange={setSelectedNewOwner}>
-              <SelectTrigger>
-                <SelectValue placeholder="Выберите нового владельца" />
-              </SelectTrigger>
-              <SelectContent>
-                {members.map((member) => (
-                  <SelectItem key={member.id} value={member.id}>
-                    {member.profile?.full_name || member.profile?.username}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
           <AlertDialogFooter>
-            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogCancel onClick={() => setSelectedMember(null)}>
+              Отмена
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleTransferOwnership}
-              disabled={loading || !selectedNewOwner}
+              disabled={loading}
             >
               Передать
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={showAdminConfirm} onOpenChange={setShowAdminConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="pr-8">
+              {selectedMember?.role === "admin" 
+                ? "Снять администратора?" 
+                : "Назначить администратором?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {selectedMember?.role === "admin" ? (
+                <>
+                  Вы снимете{" "}
+                  <strong>{selectedMember?.profile?.full_name || selectedMember?.profile?.username}</strong>{" "}
+                  с должности администратора. Участник станет обычным участником канала.
+                </>
+              ) : (
+                <>
+                  Вы назначите{" "}
+                  <strong>{selectedMember?.profile?.full_name || selectedMember?.profile?.username}</strong>{" "}
+                  администратором канала. Администратор получит доступ к настройкам и модерации канала.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setSelectedMember(null)}>
+              Отмена
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleToggleAdmin}
+              disabled={loading}
+            >
+              {selectedMember?.role === "admin" ? "Снять" : "Назначить"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -257,7 +386,7 @@ const ChannelOwnerSettings = ({
           <AlertDialogHeader>
             <AlertDialogTitle className="pr-8">Удалить канал?</AlertDialogTitle>
             <AlertDialogDescription>
-              Это действие нельзя отменить. Все сообщения и участники будут удалены.
+              Это действие необратимо. Все сообщения и данные канала будут удалены безвозвратно.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

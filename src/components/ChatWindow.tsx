@@ -659,7 +659,7 @@ const ChatWindow = ({ chatId, onBack, onStartCall }: ChatWindowProps) => {
           >
             <Search className="w-5 h-5" />
           </Button>
-          {chatType !== "private" && (
+          {chatType !== "private" && chatType !== "channel" && (
             <>
               <Button 
                 variant="ghost" 
