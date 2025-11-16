@@ -110,29 +110,34 @@ All colors MUST be HSL.
 
   /* Mobile-specific styles */
   @media (max-width: 768px) {
-    html, body {
-      overflow-x: hidden;
-      position: fixed;
-      width: 100%;
-      height: 100%;
-      overscroll-behavior: none;
+    html {
+      height: 100vh;
+      height: -webkit-fill-available;
+      overflow: hidden;
     }
     
     body {
+      min-height: 100vh;
+      min-height: -webkit-fill-available;
+      overflow-x: hidden;
+      position: relative;
       /* Use safe area insets for mobile browsers */
       padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
     }
     
     #root {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      width: 100%;
-      height: 100%;
-      overflow: auto;
-      -webkit-overflow-scrolling: touch;
+      min-height: 100vh;
+      min-height: -webkit-fill-available;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Fix for address bar covering content */
+    @supports (-webkit-touch-callout: none) {
+      body {
+        min-height: -webkit-fill-available;
+      }
     }
   }
 }
