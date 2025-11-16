@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Send, Phone, Video, MoreVertical, Mic, VideoIcon, Search, Settings2, Reply, Users, ArrowLeft } from "lucide-react";
+import { Send, Phone, Video, MoreVertical, Mic, VideoIcon, Search, Settings2, Reply, Users, ArrowLeft, Crown } from "lucide-react";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { toast } from "sonner";
@@ -22,6 +22,7 @@ import MessageSearch from "./MessageSearch";
 import GroupManagementDialog from "./GroupManagementDialog";
 import AddGroupMemberDialog from "./AddGroupMemberDialog";
 import ChannelSettings from "./ChannelSettings";
+import ChannelOwnerSettings from "./ChannelOwnerSettings";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -114,6 +115,7 @@ const ChatWindow = ({ chatId, onBack, onStartCall }: ChatWindowProps) => {
   const [showGroupManagement, setShowGroupManagement] = useState(false);
   const [showAddMembers, setShowAddMembers] = useState(false);
   const [showChannelSettings, setShowChannelSettings] = useState(false);
+  const [showOwnerSettings, setShowOwnerSettings] = useState(false);
   const [chatType, setChatType] = useState<string>("private");
   const [currentUserRole, setCurrentUserRole] = useState<string>("member");
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -668,14 +670,24 @@ const ChatWindow = ({ chatId, onBack, onStartCall }: ChatWindowProps) => {
                 <Users className="w-5 h-5" />
               </Button>
               {chatType === "channel" && currentUserRole === "owner" && (
-                <Button 
-                  variant="ghost" 
-                  size="icon"
-                  onClick={() => setShowChannelSettings(true)}
-                  title="Настройки канала"
-                >
-                  <Settings2 className="w-5 h-5" />
-                </Button>
+                <>
+                  <Button 
+                    variant="ghost" 
+                    size="icon"
+                    onClick={() => setShowChannelSettings(true)}
+                    title="Настройки канала"
+                  >
+                    <Settings2 className="w-5 h-5" />
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="icon"
+                    onClick={() => setShowOwnerSettings(true)}
+                    title="Управление владением"
+                  >
+                    <Crown className="w-5 h-5" />
+                  </Button>
+                </>
               )}
             </>
           )}
@@ -923,6 +935,25 @@ const ChatWindow = ({ chatId, onBack, onStartCall }: ChatWindowProps) => {
         chatName={chatName || ""}
         chatType={chatType}
         currentUserRole={currentUserRole}
+      />
+
+      <ChannelSettings
+        open={showChannelSettings}
+        onOpenChange={setShowChannelSettings}
+        chatId={chatId}
+      />
+
+      <ChannelOwnerSettings
+        open={showOwnerSettings}
+        onOpenChange={setShowOwnerSettings}
+        chatId={chatId}
+        onDeleted={onBack}
+      />
+
+      <AddGroupMemberDialog
+        open={showAddMembers}
+        onOpenChange={setShowAddMembers}
+        chatId={chatId}
       />
     </div>
   );
