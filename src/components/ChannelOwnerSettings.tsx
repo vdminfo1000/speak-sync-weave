@@ -64,23 +64,33 @@ const ChannelOwnerSettings = ({
 
   const loadMembers = async () => {
     try {
-      const { data, error } = await supabase
+      const { data: membersData, error: membersError } = await supabase
         .from("chat_members")
-        .select(`
-          id,
-          user_id,
-          role,
-          profile:user_id (
-            username,
-            full_name,
-            avatar_url
-          )
-        `)
+        .select("id, user_id, role")
         .eq("chat_id", chatId)
         .neq("role", "owner");
 
-      if (error) throw error;
-      setMembers(data as any || []);
+      if (membersError) throw membersError;
+
+      const userIds = membersData.map(m => m.user_id);
+      
+      const { data: profilesData, error: profilesError } = await supabase
+        .from("profiles")
+        .select("id, username, full_name, avatar_url")
+        .in("id", userIds);
+
+      if (profilesError) throw profilesError;
+
+      const membersWithProfiles = membersData.map(member => ({
+        ...member,
+        profile: profilesData.find(p => p.id === member.user_id) || {
+          username: "Unknown",
+          full_name: null,
+          avatar_url: null
+        }
+      }));
+
+      setMembers(membersWithProfiles);
     } catch (error) {
       console.error("Error loading members:", error);
       toast.error("Ошибка при загрузке участников");
