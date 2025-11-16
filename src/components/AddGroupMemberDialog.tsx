@@ -155,7 +155,7 @@ const AddGroupMemberDialog = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Добавить участников</DialogTitle>
+          <DialogTitle className="pr-8">Добавить участников</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">

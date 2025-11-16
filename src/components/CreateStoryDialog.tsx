@@ -47,7 +47,7 @@ export const CreateStoryDialog = ({ open, onOpenChange }: CreateStoryDialogProps
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Создать историю</DialogTitle>
+          <DialogTitle className="pr-8">Создать историю</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">

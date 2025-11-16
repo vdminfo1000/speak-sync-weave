@@ -436,7 +436,7 @@ const GroupVideoCall = ({
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleEndCall()}>
       <DialogContent className="max-w-6xl h-[90vh]">
         <DialogHeader>
-          <DialogTitle className="flex items-center justify-between">
+          <DialogTitle className="flex items-center justify-between pr-8">
             <span>Групповой видеозвонок</span>
             <span className="text-sm font-normal text-muted-foreground">
               {formatCallDuration(callDuration)} • {participants.length} участников

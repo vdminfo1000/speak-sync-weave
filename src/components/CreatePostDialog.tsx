@@ -57,7 +57,7 @@ export const CreatePostDialog = ({ onCreatePost }: CreatePostDialogProps) => {
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Создать пост</DialogTitle>
+          <DialogTitle className="pr-8">Создать пост</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           <Textarea

@@ -133,7 +133,7 @@ const CallHistory = ({ isOpen, onClose, currentUserId }: CallHistoryProps) => {
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>История звонков</DialogTitle>
+          <DialogTitle className="pr-8">История звонков</DialogTitle>
         </DialogHeader>
 
         <ScrollArea className="h-[500px]">

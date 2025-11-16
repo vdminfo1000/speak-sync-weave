@@ -267,7 +267,7 @@ const PublicChannelsList = ({
             </Button>
           )}
           <DialogHeader className="px-4 sm:px-0">
-            <DialogTitle className="flex items-center justify-between gap-2 flex-wrap">
+            <DialogTitle className="flex items-center justify-between gap-2 flex-wrap pr-8">
               <div className="flex items-center gap-2">
                 <Radio className="w-5 h-5" />
                 Каналы

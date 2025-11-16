@@ -161,7 +161,7 @@ const ForwardMessageDialog = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Переслать сообщение</DialogTitle>
+          <DialogTitle className="pr-8">Переслать сообщение</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">

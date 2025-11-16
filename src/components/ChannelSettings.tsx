@@ -85,7 +85,7 @@ const ChannelSettings = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+          <DialogTitle className="flex items-center gap-2 pr-8">
             <Settings className="w-5 h-5" />
             Настройки канала
           </DialogTitle>

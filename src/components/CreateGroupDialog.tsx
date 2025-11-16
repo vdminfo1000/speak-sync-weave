@@ -15,6 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Users, Radio, Search } from "lucide-react";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { getUserFriendlyError } from "@/lib/errorHandler";
 
 interface Contact {
   id: string;
@@ -144,8 +145,7 @@ const CreateGroupDialog = ({
         .single();
 
       if (chatError) {
-        console.error("Error creating chat:", chatError);
-        toast.error(`Ошибка при создании чата: ${chatError.message}`);
+        toast.error(getUserFriendlyError(chatError));
         return;
       }
 
@@ -160,8 +160,7 @@ const CreateGroupDialog = ({
         .insert({ chat_id: chat.id, user_id: user.id, role: "owner" });
 
       if (ownerError) {
-        console.error("Error adding owner:", ownerError);
-        toast.error(`Ошибка при добавлении владельца: ${ownerError.message}`);
+        toast.error(getUserFriendlyError(ownerError));
         return;
       }
 
@@ -178,8 +177,7 @@ const CreateGroupDialog = ({
           .insert(otherMembers);
 
         if (membersError) {
-          console.error("Error adding members:", membersError);
-          toast.error(`Ошибка при добавлении участников: ${membersError.message}`);
+          toast.error(getUserFriendlyError(membersError));
           return;
         }
       }
@@ -188,8 +186,7 @@ const CreateGroupDialog = ({
       onGroupCreated(chat.id);
       onOpenChange(false);
     } catch (error: any) {
-      console.error("Error creating group:", error);
-      toast.error(error?.message || "Ошибка при создании");
+      toast.error(getUserFriendlyError(error));
     } finally {
       setLoading(false);
     }
@@ -199,7 +196,7 @@ const CreateGroupDialog = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+          <DialogTitle className="flex items-center gap-2 pr-8">
             <Users className="w-5 h-5" />
             Создать группу
           </DialogTitle>
