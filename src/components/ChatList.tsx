@@ -250,7 +250,33 @@ const ChatList = ({ onSelectChat, selectedChatId }: ChatListProps) => {
         return (
           <button
             key={chat.id}
-            onClick={() => onSelectChat(chat.id)}
+            onClick={async () => {
+              onSelectChat(chat.id);
+              // Mark all messages as read
+              if (chat.unread_count && chat.unread_count > 0) {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (user) {
+                  const { data: messages } = await supabase
+                    .from("messages")
+                    .select("id")
+                    .eq("chat_id", chat.id);
+                  
+                  if (messages && messages.length > 0) {
+                    const messageIds = messages.map(m => m.id);
+                    await supabase
+                      .from("message_reads")
+                      .upsert(
+                        messageIds.map(msgId => ({
+                          message_id: msgId,
+                          user_id: user.id,
+                          read_at: new Date().toISOString()
+                        })),
+                        { onConflict: "message_id,user_id" }
+                      );
+                  }
+                }
+              }
+            }}
             className={`flex items-center gap-3 p-4 hover:bg-secondary/50 transition-colors border-b border-border ${
               selectedChatId === chat.id ? "bg-secondary" : ""
             }`}

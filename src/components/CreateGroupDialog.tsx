@@ -145,7 +145,7 @@ const CreateGroupDialog = ({
 
       if (chatError) {
         console.error("Error creating chat:", chatError);
-        toast.error("Ошибка при создании чата");
+        toast.error(`Ошибка при создании чата: ${chatError.message}`);
         return;
       }
 
@@ -161,7 +161,7 @@ const CreateGroupDialog = ({
 
       if (ownerError) {
         console.error("Error adding owner:", ownerError);
-        toast.error("Ошибка при добавлении владельца");
+        toast.error(`Ошибка при добавлении владельца: ${ownerError.message}`);
         return;
       }
 
@@ -179,7 +179,7 @@ const CreateGroupDialog = ({
 
         if (membersError) {
           console.error("Error adding members:", membersError);
-          toast.error("Ошибка при добавлении участников");
+          toast.error(`Ошибка при добавлении участников: ${membersError.message}`);
           return;
         }
       }
