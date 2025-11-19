@@ -190,8 +190,41 @@ const Messenger = () => {
     };
   }, [currentUserId]);
 
-  const handleAcceptCall = () => {
+  const handleAcceptCall = async () => {
     if (!incomingCall) return;
+    
+    console.log('[Messenger] Accepting call:', incomingCall);
+    
+    // Verify chat membership before accepting
+    try {
+      const { data: membership, error } = await supabase
+        .from('chat_members')
+        .select('user_id')
+        .eq('chat_id', incomingCall.chatId)
+        .eq('user_id', currentUserId)
+        .maybeSingle();
+      
+      console.log('[Messenger] Membership check:', { membership, error, chatId: incomingCall.chatId, userId: currentUserId });
+      
+      if (error) {
+        console.error('[Messenger] Error checking membership:', error);
+        toast.error('Ошибка проверки членства в чате');
+        setIncomingCall(null);
+        return;
+      }
+      
+      if (!membership) {
+        console.error('[Messenger] User is not a member of this chat');
+        toast.error('Вы не являетесь участником этого чата');
+        setIncomingCall(null);
+        return;
+      }
+    } catch (err) {
+      console.error('[Messenger] Exception during membership check:', err);
+      toast.error('Не удалось проверить доступ к чату');
+      setIncomingCall(null);
+      return;
+    }
     
     setActiveCall({
       chatId: incomingCall.chatId,
@@ -206,6 +239,8 @@ const Messenger = () => {
   const handleDeclineCall = async () => {
     if (!incomingCall) return;
     
+    console.log('[Messenger] Declining call:', incomingCall);
+    
     const channel = supabase.channel(`call-notifications-${incomingCall.callerId}`);
     await channel.subscribe();
     await channel.send({
@@ -216,6 +251,7 @@ const Messenger = () => {
     await supabase.removeChannel(channel);
     
     setIncomingCall(null);
+    toast.info("Звонок отклонен");
   };
 
   const handleCloseCall = () => {

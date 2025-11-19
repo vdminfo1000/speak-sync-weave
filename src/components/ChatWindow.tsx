@@ -588,6 +588,36 @@ const ChatWindow = ({ chatId, onBack, onStartCall }: ChatWindowProps) => {
       return;
     }
     
+    console.log('[ChatWindow] Starting call:', {
+      chatId,
+      otherUserId,
+      currentUserId,
+      chatName,
+      callType
+    });
+    
+    // Verify we're still a member of this chat before calling
+    try {
+      const { data: membership, error } = await supabase
+        .from('chat_members')
+        .select('user_id')
+        .eq('chat_id', chatId)
+        .eq('user_id', currentUserId)
+        .maybeSingle();
+      
+      console.log('[ChatWindow] Membership check before call:', { membership, error, chatId, userId: currentUserId });
+      
+      if (error || !membership) {
+        console.error('[ChatWindow] Not a member of this chat, cannot initiate call');
+        toast.error('Вы больше не являетесь участником этого чата');
+        return;
+      }
+    } catch (err) {
+      console.error('[ChatWindow] Exception during membership check:', err);
+      toast.error('Не удалось проверить доступ к чату');
+      return;
+    }
+    
     // Открываем диалог звонка для инициатора
     if (onStartCall) {
       onStartCall({
