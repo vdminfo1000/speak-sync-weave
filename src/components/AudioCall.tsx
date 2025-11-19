@@ -38,6 +38,10 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
   const callTimerRef = useRef<NodeJS.Timeout | null>(null);
   const callTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const statsIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const iceCandidatesQueue = useRef<RTCIceCandidateInit[]>([]);
+  const isProcessingQueue = useRef(false);
+  const reconnectAttempts = useRef(0);
+  const maxReconnectAttempts = 3;
 
   const { recordCall, updateCallStatus } = useCallHistory(currentUserId);
 
@@ -229,59 +233,109 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
         }
       };
 
-      // Обрабатываем ICE candidates с улучшенной обработкой ошибок
-      pc.onicecandidate = async (event) => {
+      // Обработ ICE кандидаты с гарантированной доставкой и очередью
+      pc.onicecandidate = (event) => {
         if (event.candidate) {
-          try {
-            await sendSignalingMessage({
-              type: "ice-candidate",
-              candidate: event.candidate,
-            });
-          } catch (error) {
-            console.error("Failed to send ICE candidate:", error);
+          console.log('[AudioCall] New ICE candidate:', {
+            type: event.candidate.type,
+            protocol: event.candidate.protocol,
+            address: event.candidate.address,
+            port: event.candidate.port,
+            priority: event.candidate.priority
+          });
+          
+          // Проверяем, установлен ли remote description
+          if (!pc.remoteDescription) {
+            console.log('[AudioCall] ⚠ Queueing ICE candidate (no remote description yet)');
+            iceCandidatesQueue.current.push(event.candidate.toJSON());
           }
+          
+          sendSignalingMessage({
+            type: "ice-candidate",
+            candidate: event.candidate,
+          }).catch(err => {
+            console.error('[AudioCall] ✗ Failed to send ICE candidate:', err);
+          });
+        } else {
+          console.log('[AudioCall] ✓ ICE candidate gathering completed');
         }
       };
 
-      // Обрабатываем изменение состояния соединения с улучшенным reconnection
-      pc.oniceconnectionstatechange = () => {
+      // Состояние ICE соединения с автоматическим переподключением
+      pc.oniceconnectionstatechange = async () => {
         console.log('[AudioCall] ICE connection state changed:', {
-          iceConnectionState: pc.iceConnectionState,
-          iceGatheringState: pc.iceGatheringState,
+          state: pc.iceConnectionState,
+          gatheringState: pc.iceGatheringState,
           signalingState: pc.signalingState,
-          connectionState: pc.connectionState
+          connectionState: pc.connectionState,
+          timestamp: new Date().toISOString()
         });
         
         if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
           if (callStatus !== "connected") {
-            console.log('[AudioCall] Call successfully connected!');
+            console.log('[AudioCall] ✓ Call successfully connected!');
+            reconnectAttempts.current = 0; // Reset reconnect counter
             setCallStatus("connected");
             toast.success("Звонок подключен");
             if (isInitiator) {
               updateCallStatus(currentUserId, otherUserId, callStartTime, "completed");
             }
+            
+            // Начинаем мониторинг качества связи
+            startQualityMonitoring(pc);
           }
         } else if (pc.iceConnectionState === "failed") {
-          console.error('[AudioCall] ICE connection failed, attempting restart');
-          if (pc.restartIce) {
-            pc.restartIce();
+          console.error('[AudioCall] ✗ ICE connection failed');
+          
+          // Пытаемся переподключиться
+          if (reconnectAttempts.current < maxReconnectAttempts) {
+            reconnectAttempts.current++;
+            console.log(`[AudioCall] Attempting reconnect ${reconnectAttempts.current}/${maxReconnectAttempts}`);
+            toast.warning(`Переподключение... (попытка ${reconnectAttempts.current})`);
+            
+            try {
+              if (pc.restartIce) {
+                pc.restartIce();
+              } else {
+                // Fallback: создаем новый offer
+                if (isInitiator) {
+                  const offer = await pc.createOffer({ iceRestart: true });
+                  await pc.setLocalDescription(offer);
+                  await sendSignalingMessage({ type: "offer", offer });
+                }
+              }
+            } catch (err) {
+              console.error('[AudioCall] Reconnect failed:', err);
+            }
           } else {
-            toast.error("Потеряно соединение");
+            console.error('[AudioCall] Max reconnect attempts reached');
+            toast.error("Не удалось восстановить соединение");
             handleEndCall();
           }
         } else if (pc.iceConnectionState === "disconnected") {
+          console.warn('[AudioCall] ⚠ ICE connection disconnected, waiting for reconnect...');
           toast.warning("Переподключение...");
+        } else if (pc.iceConnectionState === "checking") {
+          console.log('[AudioCall] Checking ICE connectivity...');
         }
       };
 
       // Мониторинг общего состояния соединения
       pc.onconnectionstatechange = () => {
-        if (import.meta.env.DEV) {
-          console.log("Connection state:", pc.connectionState);
-        }
+        console.log('[AudioCall] Connection state changed:', {
+          state: pc.connectionState,
+          iceState: pc.iceConnectionState,
+          signalingState: pc.signalingState,
+          timestamp: new Date().toISOString()
+        });
         
-        if (pc.connectionState === 'failed') {
+        if (pc.connectionState === 'connected') {
+          console.log('[AudioCall] ✓ Peer connection fully established');
+        } else if (pc.connectionState === 'failed') {
+          console.error('[AudioCall] ✗ Peer connection failed');
           toast.error("Соединение потеряно");
+        } else if (pc.connectionState === 'disconnected') {
+          console.warn('[AudioCall] Peer connection disconnected');
         }
       };
 
@@ -397,31 +451,47 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
             if (message.type === "offer") {
               console.log('[AudioCall] Processing offer from peer');
               await pc.setRemoteDescription(new RTCSessionDescription(message.offer));
-              console.log('[AudioCall] Remote description set, creating answer');
+              console.log('[AudioCall] ✓ Remote description set (offer)');
+              
+              // Обрабатываем очередь ICE candidates после установки remote description
+              await processQueuedIceCandidates(pc);
+              
               const answer = await pc.createAnswer();
+              console.log('[AudioCall] Answer created');
               await pc.setLocalDescription(answer);
-              console.log('[AudioCall] Local description set, sending answer');
+              console.log('[AudioCall] ✓ Local description set (answer)');
+              
               await sendSignalingMessage({
                 type: "answer",
                 answer: answer,
               });
+              console.log('[AudioCall] ✓ Answer sent to peer');
             } else if (message.type === "answer") {
-              console.log('[AudioCall] Processing answer from peer, signaling state:', pc.signalingState);
+              console.log('[AudioCall] Processing answer from peer');
+              console.log('[AudioCall] Current signaling state:', pc.signalingState);
+              
               if (pc.signalingState === "have-local-offer") {
                 await pc.setRemoteDescription(new RTCSessionDescription(message.answer));
-                console.log('[AudioCall] Answer set successfully');
+                console.log('[AudioCall] ✓ Remote description set (answer)');
+                
+                // Обрабатываем очередь ICE candidates после установки remote description
+                await processQueuedIceCandidates(pc);
+              } else {
+                console.warn('[AudioCall] ⚠ Cannot set answer - invalid signaling state:', pc.signalingState);
               }
             } else if (message.type === "ice-candidate" && message.candidate) {
-              console.log('[AudioCall] Adding ICE candidate');
+              console.log('[AudioCall] Received ICE candidate');
+              
               if (pc.remoteDescription) {
                 try {
                   await pc.addIceCandidate(new RTCIceCandidate(message.candidate));
-                  console.log('[AudioCall] ICE candidate added successfully');
+                  console.log('[AudioCall] ✓ ICE candidate added successfully');
                 } catch (err) {
-                  console.error("[AudioCall] Error adding ICE candidate:", err);
+                  console.error("[AudioCall] ✗ Error adding ICE candidate:", err);
                 }
               } else {
-                console.warn('[AudioCall] Remote description not set, queuing ICE candidate');
+                console.warn('[AudioCall] ⚠ Queueing ICE candidate (no remote description)');
+                iceCandidatesQueue.current.push(message.candidate);
               }
             } else if (message.type === "end-call") {
               console.log('[AudioCall] Received end-call signal');
@@ -429,7 +499,8 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
               handleEndCall();
             }
           } catch (error) {
-            console.error("[AudioCall] Error processing signaling message:", error);
+            console.error("[AudioCall] ✗ Error processing signaling message:", error);
+            toast.error("Ошибка обработки сигнала");
           }
         })
         .subscribe((status) => {
@@ -450,6 +521,72 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
           }
         });
     });
+  };
+
+  const processQueuedIceCandidates = async (pc: RTCPeerConnection) => {
+    if (isProcessingQueue.current || iceCandidatesQueue.current.length === 0) {
+      return;
+    }
+
+    isProcessingQueue.current = true;
+    console.log(`[AudioCall] Processing ${iceCandidatesQueue.current.length} queued ICE candidates`);
+
+    const queue = [...iceCandidatesQueue.current];
+    iceCandidatesQueue.current = [];
+
+    for (const candidate of queue) {
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        console.log('[AudioCall] ✓ Queued ICE candidate added');
+      } catch (err) {
+        console.error('[AudioCall] ✗ Error adding queued ICE candidate:', err);
+      }
+    }
+
+    isProcessingQueue.current = false;
+  };
+
+  const startQualityMonitoring = (pc: RTCPeerConnection) => {
+    if (statsIntervalRef.current) {
+      clearInterval(statsIntervalRef.current);
+    }
+
+    statsIntervalRef.current = setInterval(async () => {
+      try {
+        const stats = await pc.getStats();
+        let packetsLost = 0;
+        let packetsReceived = 0;
+        let currentRoundTripTime = 0;
+
+        stats.forEach((report) => {
+          if (report.type === 'inbound-rtp' && report.kind === 'audio') {
+            packetsLost += report.packetsLost || 0;
+            packetsReceived += report.packetsReceived || 0;
+          }
+          if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+            currentRoundTripTime = report.currentRoundTripTime || 0;
+          }
+        });
+
+        const packetLoss = packetsReceived > 0 ? (packetsLost / packetsReceived) * 100 : 0;
+        const ping = currentRoundTripTime * 1000;
+
+        setConnectionQuality({
+          ping: Math.round(ping),
+          packetLoss: Math.round(packetLoss * 10) / 10,
+          audioQuality: packetLoss < 2 ? 'good' : packetLoss < 5 ? 'fair' : 'poor'
+        });
+
+        console.log('[AudioCall] Connection quality:', {
+          ping: Math.round(ping),
+          packetLoss: Math.round(packetLoss * 10) / 10,
+          packetsLost,
+          packetsReceived
+        });
+      } catch (err) {
+        console.error('[AudioCall] Error getting connection stats:', err);
+      }
+    }, 3000);
   };
 
   const toggleMute = () => {
@@ -503,38 +640,43 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
   };
 
   const cleanup = () => {
-    // Stop all local audio tracks
+    console.log('[AudioCall] Cleaning up call resources');
+    
     if (localStream) {
-      localStream.getTracks().forEach(track => {
+      localStream.getTracks().forEach((track) => {
         track.stop();
+        console.log(`[AudioCall] Stopped ${track.kind} track`);
       });
     }
     
-    // Close peer connection
     if (peerConnection) {
       peerConnection.close();
+      console.log('[AudioCall] Peer connection closed');
     }
     
-    // Remove Supabase channel
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current);
-      channelRef.current = null;
+      console.log('[AudioCall] Signaling channel removed');
     }
     
-    // Clear timers
     if (callTimerRef.current) {
       clearInterval(callTimerRef.current);
-      callTimerRef.current = null;
-    }
-    if (callTimeoutRef.current) {
-      clearTimeout(callTimeoutRef.current);
-      callTimeoutRef.current = null;
     }
     
-    setLocalStream(null);
-    setPeerConnection(null);
+    if (callTimeoutRef.current) {
+      clearTimeout(callTimeoutRef.current);
+    }
+    
+    if (statsIntervalRef.current) {
+      clearInterval(statsIntervalRef.current);
+    }
+    
+    // Clear queues and refs
+    iceCandidatesQueue.current = [];
+    reconnectAttempts.current = 0;
+    
     setCallStatus("ended");
-    setCallDuration(0);
+    console.log('[AudioCall] Cleanup complete');
   };
 
   if (isMinimized) {
