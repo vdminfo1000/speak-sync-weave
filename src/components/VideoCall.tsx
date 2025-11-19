@@ -230,18 +230,37 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
           return;
         }
         
+        // Проверяем, что трек активен
+        if (event.track.readyState !== 'live') {
+          console.warn('[VideoCall] Track is not live:', event.track.readyState);
+        }
+        
         setRemoteStream(stream);
         
         if (remoteVideoRef.current) {
+          console.log('[VideoCall] Attaching remote stream to video element');
           remoteVideoRef.current.srcObject = stream;
-          console.log('[VideoCall] Remote stream attached to video element');
+          remoteVideoRef.current.volume = 1.0;
           
-          // Принудительно воспроизводим видео
-          remoteVideoRef.current.play().then(() => {
-            console.log('[VideoCall] Remote video playing');
-          }).catch(err => {
-            console.error('[VideoCall] Failed to play remote video:', err);
-          });
+          // Принудительно воспроизводим видео с обработкой ошибок
+          const playPromise = remoteVideoRef.current.play();
+          if (playPromise !== undefined) {
+            playPromise
+              .then(() => {
+                console.log('[VideoCall] Remote video playing successfully');
+              })
+              .catch(err => {
+                console.error('[VideoCall] Failed to play remote video:', err);
+                // Пробуем еще раз через небольшую задержку
+                setTimeout(() => {
+                  if (remoteVideoRef.current) {
+                    remoteVideoRef.current.play().catch(e => 
+                      console.error('[VideoCall] Retry play failed:', e)
+                    );
+                  }
+                }, 500);
+              });
+          }
         } else {
           console.error('[VideoCall] Remote video ref is null!');
         }
@@ -704,7 +723,7 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
               ref={localVideoRef}
               autoPlay
               playsInline
-              muted
+              muted={true}
               className="w-full h-full object-cover"
             />
           </div>
@@ -773,12 +792,13 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Удаленное видео */}
             <div className="relative aspect-video bg-secondary rounded-lg overflow-hidden">
-              <video
-                ref={remoteVideoRef}
-                autoPlay
-                playsInline
-                className="w-full h-full object-cover"
-              />
+            <video
+              ref={remoteVideoRef}
+              autoPlay
+              playsInline
+              muted={false}
+              className="w-full h-full object-cover"
+            />
               {!remoteStream && (
                 <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
                   Ожидание подключения...
@@ -792,7 +812,7 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
                 ref={localVideoRef}
                 autoPlay
                 playsInline
-                muted
+                muted={true}
                 className="w-full h-full object-cover"
               />
               <div className="absolute bottom-2 left-2 text-xs text-white bg-black/50 px-2 py-1 rounded">

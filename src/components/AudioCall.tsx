@@ -176,10 +176,13 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
       pc.ontrack = (event) => {
         console.log(`[AudioCall] Received remote ${event.track.kind} track:`, {
           trackId: event.track.id,
+          trackLabel: event.track.label,
           trackEnabled: event.track.enabled,
           trackReadyState: event.track.readyState,
+          trackMuted: event.track.muted,
           streamId: event.streams[0]?.id,
-          streamActive: event.streams[0]?.active
+          streamActive: event.streams[0]?.active,
+          streamTracks: event.streams[0]?.getTracks().length
         });
         
         const [stream] = event.streams;
@@ -188,16 +191,35 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
           return;
         }
         
+        // Проверяем, что трек активен
+        if (event.track.readyState !== 'live') {
+          console.warn('[AudioCall] Track is not live:', event.track.readyState);
+        }
+        
         if (audioRef.current) {
+          console.log('[AudioCall] Attaching remote stream to audio element');
           audioRef.current.srcObject = stream;
-          console.log('[AudioCall] Remote stream attached to audio element');
+          audioRef.current.volume = 1.0;
           
-          // Принудительно воспроизводим аудио
-          audioRef.current.play().then(() => {
-            console.log('[AudioCall] Remote audio playing');
-          }).catch(err => {
-            console.error('[AudioCall] Failed to play remote audio:', err);
-          });
+          // Принудительно воспроизводим аудио с обработкой ошибок
+          const playPromise = audioRef.current.play();
+          if (playPromise !== undefined) {
+            playPromise
+              .then(() => {
+                console.log('[AudioCall] Remote audio playing successfully');
+              })
+              .catch(err => {
+                console.error('[AudioCall] Failed to play remote audio:', err);
+                // Пробуем еще раз через небольшую задержку
+                setTimeout(() => {
+                  if (audioRef.current) {
+                    audioRef.current.play().catch(e => 
+                      console.error('[AudioCall] Retry play failed:', e)
+                    );
+                  }
+                }, 500);
+              });
+          }
         } else {
           console.error('[AudioCall] Audio ref is null!');
         }
@@ -523,7 +545,12 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
             </Button>
           </div>
         </div>
-        <audio ref={audioRef} autoPlay />
+        <audio 
+          ref={audioRef} 
+          autoPlay 
+          playsInline
+          style={{ display: 'none' }}
+        />
       </div>
     );
   }
@@ -597,7 +624,12 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
         </div>
 
         {/* Скрытый audio элемент для воспроизведения удаленного аудио */}
-        <audio ref={audioRef} autoPlay />
+        <audio 
+          ref={audioRef} 
+          autoPlay 
+          playsInline
+          style={{ display: 'none' }}
+        />
       </DialogContent>
 
       <InviteToGroupCallDialog
