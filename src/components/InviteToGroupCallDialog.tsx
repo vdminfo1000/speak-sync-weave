@@ -59,45 +59,68 @@ const InviteToGroupCallDialog = ({
   const loadContacts = async () => {
     setLoading(true);
     try {
+      console.log("[InviteToGroupCall] Loading contacts for user:", currentUserId);
+      
       // Получаем все чаты пользователя
       const { data: userChats, error: chatsError } = await supabase
         .from("chat_members")
         .select("chat_id")
         .eq("user_id", currentUserId);
 
-      if (chatsError) throw chatsError;
+      if (chatsError) {
+        console.error("[InviteToGroupCall] Error loading user chats:", chatsError);
+        throw chatsError;
+      }
 
       const chatIds = userChats?.map(c => c.chat_id) || [];
+      console.log("[InviteToGroupCall] User chat IDs:", chatIds);
+
+      if (chatIds.length === 0) {
+        setContacts([]);
+        setFilteredContacts([]);
+        setLoading(false);
+        return;
+      }
 
       // Получаем всех участников из всех чатов пользователя
-      const { data: chatMembers, error } = await supabase
+      const { data: chatMembers, error: membersError } = await supabase
         .from("chat_members")
-        .select(`
-          user_id,
-          profiles:user_id (
-            id,
-            username,
-            full_name,
-            avatar_url
-          )
-        `)
+        .select("user_id")
         .in("chat_id", chatIds)
         .neq("user_id", currentUserId);
 
-      if (error) throw error;
+      if (membersError) {
+        console.error("[InviteToGroupCall] Error loading chat members:", membersError);
+        throw membersError;
+      }
 
-      // Получаем уникальных контактов
-      const uniqueContacts = new Map<string, Profile>();
-      chatMembers?.forEach((member: any) => {
-        if (member.profiles && !uniqueContacts.has(member.profiles.id)) {
-          uniqueContacts.set(member.profiles.id, member.profiles);
-        }
-      });
+      // Получаем уникальные ID пользователей
+      const uniqueUserIds = [...new Set(chatMembers?.map(m => m.user_id) || [])];
+      console.log("[InviteToGroupCall] Unique user IDs:", uniqueUserIds);
 
-      setContacts(Array.from(uniqueContacts.values()));
-      setFilteredContacts(Array.from(uniqueContacts.values()));
+      if (uniqueUserIds.length === 0) {
+        setContacts([]);
+        setFilteredContacts([]);
+        setLoading(false);
+        return;
+      }
+
+      // Отдельно получаем профили
+      const { data: profiles, error: profilesError } = await supabase
+        .from("profiles")
+        .select("id, username, full_name, avatar_url")
+        .in("id", uniqueUserIds);
+
+      if (profilesError) {
+        console.error("[InviteToGroupCall] Error loading profiles:", profilesError);
+        throw profilesError;
+      }
+
+      console.log("[InviteToGroupCall] Loaded profiles:", profiles?.length);
+      setContacts(profiles || []);
+      setFilteredContacts(profiles || []);
     } catch (error) {
-      console.error("Error loading contacts:", error);
+      console.error("[InviteToGroupCall] Error loading contacts:", error);
       toast.error("Не удалось загрузить контакты");
     } finally {
       setLoading(false);

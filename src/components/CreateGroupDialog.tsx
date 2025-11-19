@@ -66,8 +66,11 @@ const CreateGroupDialog = ({
 
   const loadContacts = async () => {
     try {
+      console.log("[CreateGroup] Loading contacts");
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+
+      console.log("[CreateGroup] User ID:", user.id);
 
       // Get all chats where user is a member
       const { data: chatMembers } = await supabase
@@ -76,6 +79,8 @@ const CreateGroupDialog = ({
         .eq("user_id", user.id);
 
       if (!chatMembers) return;
+
+      console.log("[CreateGroup] User chats:", chatMembers.length);
 
       // Get all other members from these chats
       const chatIds = chatMembers.map((cm) => cm.chat_id);
@@ -88,6 +93,7 @@ const CreateGroupDialog = ({
       if (!allMembers) return;
 
       const uniqueUserIds = [...new Set(allMembers.map((m) => m.user_id))];
+      console.log("[CreateGroup] Unique user IDs:", uniqueUserIds.length);
       
       const { data: profiles } = await supabase
         .from("profiles")
@@ -95,11 +101,12 @@ const CreateGroupDialog = ({
         .in("id", uniqueUserIds);
 
       if (profiles) {
+        console.log("[CreateGroup] Loaded profiles:", profiles.length);
         setContacts(profiles);
         setFilteredContacts(profiles);
       }
     } catch (error) {
-      console.error("Error loading contacts:", error);
+      console.error("[CreateGroup] Error loading contacts:", error);
     }
   };
 
@@ -126,13 +133,20 @@ const CreateGroupDialog = ({
 
     setLoading(true);
     try {
+      console.log("[CreateGroup] Starting group creation:", {
+        groupName,
+        selectedContacts: Array.from(selectedContacts)
+      });
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         toast.error("Необходима авторизация");
         return;
       }
 
+      console.log("[CreateGroup] User authenticated:", user.id);
+
       // Create chat
+      console.log("[CreateGroup] Creating chat with name:", groupName);
       const { data: chat, error: chatError } = await supabase
         .from("chats")
         .insert({
@@ -145,27 +159,36 @@ const CreateGroupDialog = ({
         .single();
 
       if (chatError) {
+        console.error("[CreateGroup] Error creating chat:", chatError);
         toast.error(getUserFriendlyError(chatError));
         return;
       }
 
       if (!chat) {
+        console.error("[CreateGroup] No chat returned");
         toast.error("Чат не был создан");
         return;
       }
 
+      console.log("[CreateGroup] Chat created:", chat.id);
+
       // Add creator as owner first
+      console.log("[CreateGroup] Adding creator as owner");
       const { error: ownerError } = await supabase
         .from("chat_members")
         .insert({ chat_id: chat.id, user_id: user.id, role: "owner" });
 
       if (ownerError) {
+        console.error("[CreateGroup] Error adding owner:", ownerError);
         toast.error(getUserFriendlyError(ownerError));
         return;
       }
 
+      console.log("[CreateGroup] Owner added successfully");
+
       // Then add other members if any selected
       if (selectedContacts.size > 0) {
+        console.log("[CreateGroup] Adding other members:", Array.from(selectedContacts));
         const otherMembers = Array.from(selectedContacts).map((contactId) => ({
           chat_id: chat.id,
           user_id: contactId,
@@ -177,15 +200,20 @@ const CreateGroupDialog = ({
           .insert(otherMembers);
 
         if (membersError) {
+          console.error("[CreateGroup] Error adding members:", membersError);
           toast.error(getUserFriendlyError(membersError));
           return;
         }
+
+        console.log("[CreateGroup] Members added successfully");
       }
 
       toast.success("Группа создана");
+      console.log("[CreateGroup] Group creation completed successfully");
       onGroupCreated(chat.id);
       onOpenChange(false);
     } catch (error: any) {
+      console.error("[CreateGroup] Unexpected error:", error);
       toast.error(getUserFriendlyError(error));
     } finally {
       setLoading(false);
