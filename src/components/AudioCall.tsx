@@ -162,14 +162,44 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
 
       // Добавляем локальные треки
       stream.getTracks().forEach((track) => {
+        console.log(`[AudioCall] Adding local ${track.kind} track:`, {
+          id: track.id,
+          label: track.label,
+          enabled: track.enabled,
+          readyState: track.readyState
+        });
         pc.addTrack(track, stream);
+        console.log(`[AudioCall] Track ${track.kind} added to peer connection`);
       });
 
       // Обрабатываем входящие треки
       pc.ontrack = (event) => {
-        const [remoteStream] = event.streams;
+        console.log(`[AudioCall] Received remote ${event.track.kind} track:`, {
+          trackId: event.track.id,
+          trackEnabled: event.track.enabled,
+          trackReadyState: event.track.readyState,
+          streamId: event.streams[0]?.id,
+          streamActive: event.streams[0]?.active
+        });
+        
+        const [stream] = event.streams;
+        if (!stream) {
+          console.error('[AudioCall] No stream in track event!');
+          return;
+        }
+        
         if (audioRef.current) {
-          audioRef.current.srcObject = remoteStream;
+          audioRef.current.srcObject = stream;
+          console.log('[AudioCall] Remote stream attached to audio element');
+          
+          // Принудительно воспроизводим аудио
+          audioRef.current.play().then(() => {
+            console.log('[AudioCall] Remote audio playing');
+          }).catch(err => {
+            console.error('[AudioCall] Failed to play remote audio:', err);
+          });
+        } else {
+          console.error('[AudioCall] Audio ref is null!');
         }
       };
 
@@ -189,12 +219,16 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
 
       // Обрабатываем изменение состояния соединения с улучшенным reconnection
       pc.oniceconnectionstatechange = () => {
-        if (import.meta.env.DEV) {
-          console.log("ICE connection state:", pc.iceConnectionState);
-        }
+        console.log('[AudioCall] ICE connection state changed:', {
+          iceConnectionState: pc.iceConnectionState,
+          iceGatheringState: pc.iceGatheringState,
+          signalingState: pc.signalingState,
+          connectionState: pc.connectionState
+        });
         
         if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
           if (callStatus !== "connected") {
+            console.log('[AudioCall] Call successfully connected!');
             setCallStatus("connected");
             toast.success("Звонок подключен");
             if (isInitiator) {
@@ -202,7 +236,7 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
             }
           }
         } else if (pc.iceConnectionState === "failed") {
-          console.warn("ICE connection failed, attempting restart");
+          console.error('[AudioCall] ICE connection failed, attempting restart');
           if (pc.restartIce) {
             pc.restartIce();
           } else {
@@ -230,17 +264,23 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
 
       // Если мы инициатор звонка, создаем offer
       if (isInitiator) {
+        console.log('[AudioCall] Creating offer as initiator');
         // Даем время на полную подписку канала
         await new Promise(resolve => setTimeout(resolve, 500));
         
         const offer = await pc.createOffer({
           offerToReceiveAudio: true,
         });
+        console.log('[AudioCall] Offer created');
+        
         await pc.setLocalDescription(offer);
+        console.log('[AudioCall] Local description set (offer)');
+        
         await sendSignalingMessage({
           type: "offer",
           offer: offer,
         });
+        console.log('[AudioCall] Offer sent to peer');
       }
 
     } catch (error) {
