@@ -274,35 +274,48 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
         }
       };
 
-      // Обрабатываем ICE candidates с улучшенной обработкой ошибок
-      pc.onicecandidate = async (event) => {
+      // Обрабатываем ICE кандидаты с гарантированной доставкой и очередью
+      pc.onicecandidate = (event) => {
         if (event.candidate) {
-          if (import.meta.env.DEV) {
-            console.log("Sending ICE candidate");
+          console.log('[VideoCall] New ICE candidate:', {
+            type: event.candidate.type,
+            protocol: event.candidate.protocol,
+            address: event.candidate.address,
+            port: event.candidate.port,
+            priority: event.candidate.priority
+          });
+          
+          // Проверяем, установлен ли remote description
+          if (!pc.remoteDescription) {
+            console.log('[VideoCall] ⚠ Queueing ICE candidate (no remote description yet)');
+            iceCandidatesQueue.current.push(event.candidate.toJSON());
           }
-          try {
-            await sendSignalingMessage({
-              type: "ice-candidate",
-              candidate: event.candidate,
-            });
-          } catch (error) {
-            console.error("Failed to send ICE candidate:", error);
-          }
+          
+          sendSignalingMessage({
+            type: "ice-candidate",
+            candidate: event.candidate,
+          }).catch(err => {
+            console.error('[VideoCall] ✗ Failed to send ICE candidate:', err);
+          });
+        } else {
+          console.log('[VideoCall] ✓ ICE candidate gathering completed');
         }
       };
 
-      // Обрабатываем изменение состояния соединения с улучшенным reconnection
-      pc.oniceconnectionstatechange = () => {
+      // Состояние ICE соединения с автоматическим переподключением
+      pc.oniceconnectionstatechange = async () => {
         console.log('[VideoCall] ICE connection state changed:', {
-          iceConnectionState: pc.iceConnectionState,
-          iceGatheringState: pc.iceGatheringState,
+          state: pc.iceConnectionState,
+          gatheringState: pc.iceGatheringState,
           signalingState: pc.signalingState,
-          connectionState: pc.connectionState
+          connectionState: pc.connectionState,
+          timestamp: new Date().toISOString()
         });
         
         if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
           if (callStatus !== "connected") {
-            console.log('[VideoCall] Call successfully connected!');
+            console.log('[VideoCall] ✓ Call successfully connected!');
+            reconnectAttempts.current = 0; // Reset reconnect counter
             setCallStatus("connected");
             toast.success("Звонок подключен");
             if (isInitiator) {
@@ -310,29 +323,59 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
             }
           }
         } else if (pc.iceConnectionState === "failed") {
-          console.error('[VideoCall] ICE connection failed, attempting restart');
-          if (pc.restartIce) {
-            pc.restartIce();
+          console.error('[VideoCall] ✗ ICE connection failed');
+          
+          // Пытаемся переподключиться
+          if (reconnectAttempts.current < maxReconnectAttempts) {
+            reconnectAttempts.current++;
+            console.log(`[VideoCall] Attempting reconnect ${reconnectAttempts.current}/${maxReconnectAttempts}`);
+            toast.warning(`Переподключение... (попытка ${reconnectAttempts.current})`);
+            
+            try {
+              if (pc.restartIce) {
+                pc.restartIce();
+              } else {
+                // Fallback: создаем новый offer
+                if (isInitiator) {
+                  const offer = await pc.createOffer({ iceRestart: true });
+                  await pc.setLocalDescription(offer);
+                  await sendSignalingMessage({ type: "offer", offer });
+                }
+              }
+            } catch (err) {
+              console.error('[VideoCall] Reconnect failed:', err);
+            }
           } else {
-            toast.error("Потеряно соединение");
+            console.error('[VideoCall] Max reconnect attempts reached');
+            toast.error("Не удалось восстановить соединение");
             handleEndCall();
           }
         } else if (pc.iceConnectionState === "disconnected") {
+          console.warn('[VideoCall] ⚠ ICE connection disconnected, waiting for reconnect...');
           toast.warning("Переподключение...");
+        } else if (pc.iceConnectionState === "checking") {
+          console.log('[VideoCall] Checking ICE connectivity...');
         }
       };
 
       // Мониторинг общего состояния соединения
       pc.onconnectionstatechange = () => {
-        if (import.meta.env.DEV) {
-          console.log("Connection state:", pc.connectionState);
-        }
+        console.log('[VideoCall] Connection state changed:', {
+          state: pc.connectionState,
+          iceState: pc.iceConnectionState,
+          signalingState: pc.signalingState,
+          timestamp: new Date().toISOString()
+        });
         
-        if (pc.connectionState === 'failed') {
-          toast.error("Соединение потеряно");
-        } else if (pc.connectionState === 'connected') {
+        if (pc.connectionState === 'connected') {
+          console.log('[VideoCall] ✓ Peer connection fully established');
           // Начинаем мониторинг качества связи
           startQualityMonitoring(pc);
+        } else if (pc.connectionState === 'failed') {
+          console.error('[VideoCall] ✗ Peer connection failed');
+          toast.error("Соединение потеряно");
+        } else if (pc.connectionState === 'disconnected') {
+          console.warn('[VideoCall] Peer connection disconnected');
         }
       };
 
