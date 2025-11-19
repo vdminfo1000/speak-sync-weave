@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Send, Phone, Video, MoreVertical, Mic, VideoIcon, Search, Settings2, Reply, Users, ArrowLeft, Crown } from "lucide-react";
+import ChatActions from "./ChatActions";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { toast } from "sonner";
@@ -710,6 +711,17 @@ const ChatWindow = ({ chatId, onBack, onStartCall }: ChatWindowProps) => {
                 <Video className="w-5 h-5" />
               </Button>
             </>
+          )}
+          {chatType !== "channel" && (
+            <ChatActions
+              chatId={chatId}
+              isGroup={chatType === "group"}
+              currentUserId={currentUserId}
+              onChatDeleted={() => {
+                toast.success(chatType === "group" ? "Вы вышли из группы" : "Чат удален");
+                if (onBack) onBack();
+              }}
+            />
           )}
         </div>
       </div>
