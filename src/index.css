@@ -92,14 +92,33 @@ All colors MUST be HSL.
   * {
     @apply border-border;
     box-sizing: border-box;
-    max-width: 100%;
+  }
+
+  html {
+    height: 100%;
+    width: 100%;
+    overflow-x: hidden;
+    position: fixed;
+    overscroll-behavior: none;
   }
 
   body {
     @apply bg-background text-foreground;
+    height: 100%;
     width: 100%;
-    max-width: 100vw;
     overflow-x: hidden;
+    position: fixed;
+    overscroll-behavior: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  #root {
+    height: 100%;
+    width: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   /* Предотвращаем переполнение медиа-контента */
@@ -115,28 +134,23 @@ All colors MUST be HSL.
     }
   }
 
-  html {
-    height: -webkit-fill-available;
-    width: 100%;
-    max-width: 100vw;
-    overflow-x: hidden;
-  }
-
   /* Mobile-specific styles */
   @media (max-width: 768px) {
     html {
       height: 100vh;
       height: -webkit-fill-available;
-      overflow-x: hidden;
+      position: fixed;
+      overflow: hidden;
     }
     
     body {
       min-height: 100vh;
       min-height: -webkit-fill-available;
-      overflow-x: hidden;
-      position: relative;
-      width: 100%;
-      max-width: 100vw;
+      height: 100vh;
+      height: -webkit-fill-available;
+      position: fixed;
+      overflow: hidden;
+      width: 100vw;
       /* Use safe area insets for mobile browsers */
       padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
     }
@@ -144,23 +158,34 @@ All colors MUST be HSL.
     #root {
       min-height: 100vh;
       min-height: -webkit-fill-available;
+      height: 100vh;
+      height: -webkit-fill-available;
       display: flex;
       flex-direction: column;
+      overflow-y: auto;
       overflow-x: hidden;
-      width: 100%;
+      width: 100vw;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+    }
+
+    /* Prevent horizontal scroll on all mobile elements */
+    * {
       max-width: 100vw;
+      overflow-x: hidden;
     }
 
     /* Fix for address bar covering content */
     @supports (-webkit-touch-callout: none) {
       body {
         min-height: -webkit-fill-available;
+        height: -webkit-fill-available;
       }
-    }
-
-    /* Предотвращаем горизонтальную прокрутку */
-    * {
-      max-width: 100vw;
+      
+      #root {
+        min-height: -webkit-fill-available;
+        height: -webkit-fill-available;
+      }
     }
   }
 }
