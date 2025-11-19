@@ -358,6 +358,21 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
         }
       };
 
+      // Устанавливаем таймаут для ICE gathering (10 секунд максимум)
+      const iceGatheringTimeout = setTimeout(() => {
+        if (pc.iceGatheringState === 'gathering') {
+          console.warn('[VideoCall] ⚠ ICE gathering timeout after 10 seconds, proceeding anyway');
+        }
+      }, 10000);
+
+      pc.onicegatheringstatechange = () => {
+        console.log('[VideoCall] ICE gathering state changed:', pc.iceGatheringState);
+        if (pc.iceGatheringState === 'complete') {
+          console.log('[VideoCall] ✓ ICE candidate gathering completed');
+          clearTimeout(iceGatheringTimeout);
+        }
+      };
+
       // Мониторинг общего состояния соединения
       pc.onconnectionstatechange = () => {
         console.log('[VideoCall] Connection state changed:', {
@@ -382,13 +397,9 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
       // Подписываемся на сообщения сигнализации ПЕРЕД созданием offer
       await subscribeToSignaling(pc);
 
-      // Если мы инициатор звонка, создаем offer с оптимизацией для низкой задержки
+      // Если мы инициатор звонка, создаем offer немедленно (Trickle ICE)
       if (isInitiator) {
-        console.log('[VideoCall] Creating offer as initiator');
-        // Даем время получателю подписаться на канал (1 секунда - уменьшено для быстрого соединения)
-        console.log('[VideoCall] Waiting 1 second for receiver to subscribe...');
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        console.log('[VideoCall] Proceeding with offer creation');
+        console.log('[VideoCall] Creating offer as initiator (Trickle ICE)');
         
         const offer = await pc.createOffer({
           offerToReceiveAudio: true,
@@ -397,13 +408,14 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
         console.log('[VideoCall] Offer created:', offer.type);
         
         await pc.setLocalDescription(offer);
-        console.log('[VideoCall] Local description set (offer)');
+        console.log('[VideoCall] Local description set, ICE gathering state:', pc.iceGatheringState);
         
+        // Отправляем offer немедленно, не дожидаясь всех ICE-кандидатов
         await sendSignalingMessage({
           type: "offer",
           offer: offer,
         });
-        console.log('[VideoCall] Offer sent to peer');
+        console.log('[VideoCall] Offer sent immediately to peer');
       }
 
     } catch (error) {
@@ -490,7 +502,7 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
 
           try {
             if (message.type === "offer") {
-              console.log('[VideoCall] Processing offer from peer');
+              console.log('[VideoCall] 📨 Received offer from peer at', new Date().toISOString());
               await pc.setRemoteDescription(new RTCSessionDescription(message.offer));
               console.log('[VideoCall] ✓ Remote description set (offer)');
               
@@ -507,9 +519,9 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
                 type: "answer",
                 answer: answer,
               });
-              console.log('[VideoCall] ✓ Answer sent to peer');
+              console.log('[VideoCall] ✓ Answer sent to peer at', new Date().toISOString());
             } else if (message.type === "answer") {
-              console.log('[VideoCall] Processing answer from peer');
+              console.log('[VideoCall] 📨 Received answer from peer at', new Date().toISOString());
               console.log('[VideoCall] Current signaling state:', pc.signalingState);
               
               if (pc.signalingState === "have-local-offer") {

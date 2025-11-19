@@ -320,6 +320,21 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
         }
       };
 
+      // Устанавливаем таймаут для ICE gathering (10 секунд максимум)
+      const iceGatheringTimeout = setTimeout(() => {
+        if (pc.iceGatheringState === 'gathering') {
+          console.warn('[AudioCall] ⚠ ICE gathering timeout after 10 seconds, proceeding anyway');
+        }
+      }, 10000);
+
+      pc.onicegatheringstatechange = () => {
+        console.log('[AudioCall] ICE gathering state changed:', pc.iceGatheringState);
+        if (pc.iceGatheringState === 'complete') {
+          console.log('[AudioCall] ✓ ICE candidate gathering completed');
+          clearTimeout(iceGatheringTimeout);
+        }
+      };
+
       // Мониторинг общего состояния соединения
       pc.onconnectionstatechange = () => {
         console.log('[AudioCall] Connection state changed:', {
@@ -342,13 +357,9 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
       // Подписываемся на сообщения сигнализации ПЕРЕД созданием offer
       await subscribeToSignaling(pc);
 
-      // Если мы инициатор звонка, создаем offer с оптимизацией для низкой задержки
+      // Если мы инициатор звонка, создаем offer немедленно (Trickle ICE)
       if (isInitiator) {
-        console.log('[AudioCall] Creating offer as initiator');
-        // Даем время получателю подписаться на канал (1 секунда - уменьшено для быстрого соединения)
-        console.log('[AudioCall] Waiting 1 second for receiver to subscribe...');
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        console.log('[AudioCall] Proceeding with offer creation');
+        console.log('[AudioCall] Creating offer as initiator (Trickle ICE)');
         
         const offer = await pc.createOffer({
           offerToReceiveAudio: true,
@@ -356,13 +367,14 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
         console.log('[AudioCall] Offer created');
         
         await pc.setLocalDescription(offer);
-        console.log('[AudioCall] Local description set (offer)');
+        console.log('[AudioCall] Local description set, ICE gathering state:', pc.iceGatheringState);
         
+        // Отправляем offer немедленно, не дожидаясь всех ICE-кандидатов
         await sendSignalingMessage({
           type: "offer",
           offer: offer,
         });
-        console.log('[AudioCall] Offer sent to peer');
+        console.log('[AudioCall] Offer sent immediately to peer');
       }
 
     } catch (error) {
@@ -449,7 +461,7 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
 
           try {
             if (message.type === "offer") {
-              console.log('[AudioCall] Processing offer from peer');
+              console.log('[AudioCall] 📨 Received offer from peer at', new Date().toISOString());
               await pc.setRemoteDescription(new RTCSessionDescription(message.offer));
               console.log('[AudioCall] ✓ Remote description set (offer)');
               
@@ -459,15 +471,15 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
               const answer = await pc.createAnswer();
               console.log('[AudioCall] Answer created');
               await pc.setLocalDescription(answer);
-              console.log('[AudioCall] ✓ Local description set (answer)');
+              console.log('[AudioCall] ✓ Local description set (answer), ICE gathering:', pc.iceGatheringState);
               
               await sendSignalingMessage({
                 type: "answer",
                 answer: answer,
               });
-              console.log('[AudioCall] ✓ Answer sent to peer');
+              console.log('[AudioCall] ✓ Answer sent to peer at', new Date().toISOString());
             } else if (message.type === "answer") {
-              console.log('[AudioCall] Processing answer from peer');
+              console.log('[AudioCall] 📨 Received answer from peer at', new Date().toISOString());
               console.log('[AudioCall] Current signaling state:', pc.signalingState);
               
               if (pc.signalingState === "have-local-offer") {
