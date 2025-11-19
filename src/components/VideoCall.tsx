@@ -63,9 +63,13 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
   useEffect(() => {
     if (!isOpen) return;
 
-    if (import.meta.env.DEV) {
-      console.log("VideoCall opened, isInitiator:", isInitiator);
-    }
+    console.log('[VideoCall] Component opened:', {
+      isInitiator,
+      currentUserId,
+      otherUserId,
+      chatId,
+      timestamp: new Date().toISOString()
+    });
 
     // Записываем начало звонка
     if (isInitiator) {
@@ -334,8 +338,10 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
       // Если мы инициатор звонка, создаем offer
       if (isInitiator) {
         console.log('[VideoCall] Creating offer as initiator');
-        // Даем время на полную подписку канала
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // Даем время получателю подписаться на канал (2 секунды)
+        console.log('[VideoCall] Waiting 2 seconds for receiver to subscribe...');
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        console.log('[VideoCall] Proceeding with offer creation');
         
         const offer = await pc.createOffer({
           offerToReceiveAudio: true,
@@ -412,12 +418,18 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
             from: payload.from,
             to: payload.to,
             currentUserId,
-            otherUserId
+            otherUserId,
+            timestamp: new Date().toISOString()
           });
           
-          // Server-verified payload - 'from' field is now trustworthy
+          // Строгая фильтрация: сообщение должно быть ОТ другого пользователя И ДЛЯ нас
+          if (payload.from === currentUserId) {
+            console.log('[VideoCall] Ignoring our own message');
+            return;
+          }
+          
           if (payload.to && payload.to !== currentUserId) {
-            console.log('[VideoCall] Message not for us, ignoring');
+            console.log('[VideoCall] Message is for someone else:', payload.to);
             return;
           }
 
@@ -475,13 +487,19 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
           }
         })
         .subscribe((status) => {
-          console.log('[VideoCall] Channel subscription status:', status);
+          console.log('[VideoCall] Channel subscription status:', status, {
+            chatId,
+            currentUserId,
+            otherUserId,
+            isInitiator,
+            timestamp: new Date().toISOString()
+          });
           if (status === "SUBSCRIBED") {
-            console.log('[VideoCall] Successfully subscribed to signaling channel');
+            console.log('[VideoCall] ✓ Successfully subscribed to signaling channel - ready to receive messages');
             channelRef.current = channel;
             resolve();
           } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-            console.error('[VideoCall] Subscription failed:', status);
+            console.error('[VideoCall] ✗ Subscription failed:', status);
             reject(new Error(`Channel subscription failed: ${status}`));
           }
         });
