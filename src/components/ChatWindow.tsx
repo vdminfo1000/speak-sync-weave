@@ -130,24 +130,131 @@ const ChatWindow = ({ chatId, onBack, onStartCall }: ChatWindowProps) => {
       .on(
         "postgres_changes",
         {
-          event: "*",
+          event: "INSERT",
           schema: "public",
           table: "messages",
           filter: `chat_id=eq.${chatId}`,
         },
-        (payload) => {
-          loadMessages();
+        async (payload) => {
+          console.log("[ChatWindow] New message INSERT event:", payload);
+          const newMsg = payload.new as any;
+          
+          // Fetch sender profile
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("username, full_name, avatar_url")
+            .eq("id", newMsg.sender_id)
+            .single();
+
+          // Fetch replied message if exists
+          let replied_message = null;
+          if (newMsg.replied_to_message_id) {
+            const { data: repliedMsg } = await supabase
+              .from("messages")
+              .select("content, sender:sender_id(username)")
+              .eq("id", newMsg.replied_to_message_id)
+              .single();
+            replied_message = repliedMsg;
+          }
+
+          const messageWithSender = {
+            ...newMsg,
+            sender: profile,
+            read_by: [],
+            delivered_to: [],
+            replied_message
+          };
+
+          setMessages(prev => {
+            // Check if message already exists to avoid duplicates
+            if (prev.some(m => m.id === newMsg.id)) {
+              return prev;
+            }
+            return [...prev, messageWithSender];
+          });
         }
       )
       .on(
         "postgres_changes",
         {
-          event: "*",
+          event: "UPDATE",
+          schema: "public",
+          table: "messages",
+          filter: `chat_id=eq.${chatId}`,
+        },
+        async (payload) => {
+          console.log("[ChatWindow] Message UPDATE event:", payload);
+          const updatedMsg = payload.new as any;
+          
+          setMessages(prev => prev.map(msg => 
+            msg.id === updatedMsg.id 
+              ? { ...msg, ...updatedMsg, sender: msg.sender }
+              : msg
+          ));
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "DELETE",
+          schema: "public",
+          table: "messages",
+          filter: `chat_id=eq.${chatId}`,
+        },
+        (payload) => {
+          console.log("[ChatWindow] Message DELETE event:", payload);
+          const deletedMsg = payload.old as any;
+          setMessages(prev => prev.filter(msg => msg.id !== deletedMsg.id));
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
           schema: "public",
           table: "message_reads",
         },
-        (payload) => {
-          loadMessages();
+        async (payload) => {
+          console.log("[ChatWindow] Message read INSERT event:", payload);
+          const readData = payload.new as any;
+          
+          setMessages(prev => prev.map(msg => {
+            if (msg.id === readData.message_id) {
+              const existingReads = msg.read_by || [];
+              if (!existingReads.some(r => r.user_id === readData.user_id)) {
+                return {
+                  ...msg,
+                  read_by: [...existingReads, { user_id: readData.user_id }]
+                };
+              }
+            }
+            return msg;
+          }));
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "message_deliveries",
+        },
+        async (payload) => {
+          console.log("[ChatWindow] Message delivery INSERT event:", payload);
+          const deliveryData = payload.new as any;
+          
+          setMessages(prev => prev.map(msg => {
+            if (msg.id === deliveryData.message_id) {
+              const existingDeliveries = msg.delivered_to || [];
+              if (!existingDeliveries.some(d => d.user_id === deliveryData.user_id)) {
+                return {
+                  ...msg,
+                  delivered_to: [...existingDeliveries, { user_id: deliveryData.user_id }]
+                };
+              }
+            }
+            return msg;
+          }));
         }
       )
       .subscribe();
@@ -433,18 +540,32 @@ const ChatWindow = ({ chatId, onBack, onStartCall }: ChatWindowProps) => {
         setEditingMessageId(null);
       } else {
         // Создание нового сообщения
-        const { error } = await supabase.from("messages").insert({
-          chat_id: chatId,
-          sender_id: currentUserId,
-          content: validatedContent,
-          file_url: fileUrl,
-          file_name: fileName,
-          file_size: fileSize,
-          file_type: fileType,
-          replied_to_message_id: replyingTo?.id || null,
-        });
+        const { data: insertedMessage, error } = await supabase
+          .from("messages")
+          .insert({
+            chat_id: chatId,
+            sender_id: currentUserId,
+            content: validatedContent,
+            file_url: fileUrl,
+            file_name: fileName,
+            file_size: fileSize,
+            file_type: fileType,
+            replied_to_message_id: replyingTo?.id || null,
+          })
+          .select()
+          .single();
 
         if (error) throw error;
+
+        console.log("[ChatWindow] Message sent successfully:", insertedMessage);
+
+        // Mark message as delivered for the current user immediately
+        if (insertedMessage) {
+          await supabase.from("message_deliveries").insert({
+            message_id: insertedMessage.id,
+            user_id: currentUserId,
+          });
+        }
       }
 
       await supabase
@@ -484,17 +605,32 @@ const ChatWindow = ({ chatId, onBack, onStartCall }: ChatWindowProps) => {
 
       if (uploadError) throw uploadError;
 
-      const { error } = await supabase.from("messages").insert({
-        chat_id: chatId,
-        sender_id: currentUserId,
-        content: "🎤 Голосовое сообщение",
-        file_url: filePath,
-        file_name: fileName,
-        file_size: audioBlob.size,
-        file_type: 'audio/webm',
-      });
+      const { data: insertedMessage, error } = await supabase
+        .from("messages")
+        .insert({
+          chat_id: chatId,
+          sender_id: currentUserId,
+          content: "🎤 Голосовое сообщение",
+          file_url: filePath,
+          file_name: fileName,
+          file_size: audioBlob.size,
+          file_type: 'audio/webm',
+        })
+        .select()
+        .single();
 
       if (error) throw error;
+      
+      console.log("[ChatWindow] Voice message sent successfully:", insertedMessage);
+      
+      // Mark message as delivered for the current user
+      if (insertedMessage) {
+        await supabase.from("message_deliveries").insert({
+          message_id: insertedMessage.id,
+          user_id: currentUserId,
+        });
+      }
+      
       setShowVoiceRecorder(false);
     } catch (error: any) {
       toast.error(getUserFriendlyError(error));
@@ -516,17 +652,32 @@ const ChatWindow = ({ chatId, onBack, onStartCall }: ChatWindowProps) => {
 
       if (uploadError) throw uploadError;
 
-      const { error } = await supabase.from("messages").insert({
-        chat_id: chatId,
-        sender_id: currentUserId,
-        content: "🎥 Видеосообщение",
-        file_url: filePath,
-        file_name: fileName,
-        file_size: videoBlob.size,
-        file_type: 'video/webm',
-      });
+      const { data: insertedMessage, error } = await supabase
+        .from("messages")
+        .insert({
+          chat_id: chatId,
+          sender_id: currentUserId,
+          content: "🎥 Видеосообщение",
+          file_url: filePath,
+          file_name: fileName,
+          file_size: videoBlob.size,
+          file_type: 'video/webm',
+        })
+        .select()
+        .single();
 
       if (error) throw error;
+      
+      console.log("[ChatWindow] Video message sent successfully:", insertedMessage);
+      
+      // Mark message as delivered for the current user
+      if (insertedMessage) {
+        await supabase.from("message_deliveries").insert({
+          message_id: insertedMessage.id,
+          user_id: currentUserId,
+        });
+      }
+      
       setShowVideoRecorder(false);
     } catch (error: any) {
       toast.error(getUserFriendlyError(error));
