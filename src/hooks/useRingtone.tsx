@@ -107,16 +107,29 @@ export const useRingtone = (currentUserId: string, contactId?: string) => {
   const stopRingtone = () => {
     if (audioElementRef.current) {
       audioElementRef.current.pause();
+      audioElementRef.current.currentTime = 0;
+      audioElementRef.current.src = '';
+      audioElementRef.current.load();
       audioElementRef.current = null;
     }
 
     if (oscillatorRef.current) {
       try {
         oscillatorRef.current.stop();
+        oscillatorRef.current.disconnect();
       } catch (e) {
         // Already stopped
       }
       oscillatorRef.current = null;
+    }
+
+    if (gainNodeRef.current) {
+      try {
+        gainNodeRef.current.disconnect();
+      } catch (e) {
+        // Already disconnected
+      }
+      gainNodeRef.current = null;
     }
 
     if (audioContextRef.current) {

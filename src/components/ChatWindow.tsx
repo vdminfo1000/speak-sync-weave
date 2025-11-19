@@ -565,6 +565,35 @@ const ChatWindow = ({ chatId, onBack, onStartCall }: ChatWindowProps) => {
             message_id: insertedMessage.id,
             user_id: currentUserId,
           });
+
+          // Fetch sender profile
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("username, full_name, avatar_url")
+            .eq("id", currentUserId)
+            .single();
+
+          // Fetch replied message if exists
+          let replied_message = null;
+          if (insertedMessage.replied_to_message_id) {
+            const { data: repliedMsg } = await supabase
+              .from("messages")
+              .select("content, sender:sender_id(username)")
+              .eq("id", insertedMessage.replied_to_message_id)
+              .single();
+            replied_message = repliedMsg;
+          }
+
+          // Add message to local state immediately
+          const messageWithSender = {
+            ...insertedMessage,
+            sender: profile,
+            read_by: [],
+            delivered_to: [{ user_id: currentUserId }],
+            replied_message
+          };
+
+          setMessages(prev => [...prev, messageWithSender]);
         }
       }
 
@@ -629,6 +658,24 @@ const ChatWindow = ({ chatId, onBack, onStartCall }: ChatWindowProps) => {
           message_id: insertedMessage.id,
           user_id: currentUserId,
         });
+
+        // Fetch sender profile
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("username, full_name, avatar_url")
+          .eq("id", currentUserId)
+          .single();
+
+        // Add message to local state immediately
+        const messageWithSender = {
+          ...insertedMessage,
+          sender: profile,
+          read_by: [],
+          delivered_to: [{ user_id: currentUserId }],
+          replied_message: null
+        };
+
+        setMessages(prev => [...prev, messageWithSender]);
       }
       
       setShowVoiceRecorder(false);
@@ -676,6 +723,24 @@ const ChatWindow = ({ chatId, onBack, onStartCall }: ChatWindowProps) => {
           message_id: insertedMessage.id,
           user_id: currentUserId,
         });
+
+        // Fetch sender profile
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("username, full_name, avatar_url")
+          .eq("id", currentUserId)
+          .single();
+
+        // Add message to local state immediately
+        const messageWithSender = {
+          ...insertedMessage,
+          sender: profile,
+          read_by: [],
+          delivered_to: [{ user_id: currentUserId }],
+          replied_message: null
+        };
+
+        setMessages(prev => [...prev, messageWithSender]);
       }
       
       setShowVideoRecorder(false);
