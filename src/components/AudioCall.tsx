@@ -314,15 +314,21 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
 
   const sendSignalingMessage = async (message: any) => {
     try {
+      console.log('[AudioCall] Sending signaling message:', {
+        type: message.type,
+        to: otherUserId,
+        chatId
+      });
+      
       // Get auth session for secure relay
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
-        console.error("No active session for signaling");
+        console.error("[AudioCall] No active session for signaling");
         return;
       }
 
       // Send through secure edge function relay
-      const { error } = await supabase.functions.invoke('relay-signaling', {
+      const { data, error } = await supabase.functions.invoke('relay-signaling', {
         body: {
           to: otherUserId,
           message,
@@ -332,16 +338,20 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
       });
 
       if (error) {
-        console.error("Error sending signaling message:", error);
+        console.error("[AudioCall] Error sending signaling message:", error);
         toast.error("Ошибка отправки сигнала");
+      } else {
+        console.log('[AudioCall] Signaling message sent successfully:', message.type);
       }
     } catch (error) {
-      console.error("Error sending signaling message:", error);
+      console.error("[AudioCall] Error in sendSignalingMessage:", error);
     }
   };
 
   const subscribeToSignaling = async (pc: RTCPeerConnection) => {
     return new Promise<void>((resolve, reject) => {
+      console.log('[AudioCall] Subscribing to signaling channel:', `audio-call-${chatId}`);
+      
       const channel = supabase
         .channel(`audio-call-${chatId}`, {
           config: {
@@ -349,47 +359,75 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
           },
         })
         .on("broadcast", { event: "signaling" }, async ({ payload }) => {
+          console.log('[AudioCall] Received signaling message:', {
+            type: payload.message?.type,
+            from: payload.from,
+            to: payload.to,
+            currentUserId,
+            otherUserId
+          });
+          
           // Server-verified payload - 'from' field is now trustworthy
-          if (payload.to && payload.to !== currentUserId) return;
+          if (payload.to && payload.to !== currentUserId) {
+            console.log('[AudioCall] Message not for us, ignoring');
+            return;
+          }
 
           const { message, from } = payload;
           
           // Verify message is from expected peer
           if (from !== otherUserId) {
+            console.warn('[AudioCall] Message from unexpected peer:', from, 'expected:', otherUserId);
             return;
           }
 
           try {
             if (message.type === "offer") {
+              console.log('[AudioCall] Processing offer from peer');
               await pc.setRemoteDescription(new RTCSessionDescription(message.offer));
+              console.log('[AudioCall] Remote description set, creating answer');
               const answer = await pc.createAnswer();
               await pc.setLocalDescription(answer);
+              console.log('[AudioCall] Local description set, sending answer');
               await sendSignalingMessage({
                 type: "answer",
                 answer: answer,
               });
             } else if (message.type === "answer") {
+              console.log('[AudioCall] Processing answer from peer, signaling state:', pc.signalingState);
               if (pc.signalingState === "have-local-offer") {
                 await pc.setRemoteDescription(new RTCSessionDescription(message.answer));
+                console.log('[AudioCall] Answer set successfully');
               }
-            } else if (message.type === "ice-candidate") {
+            } else if (message.type === "ice-candidate" && message.candidate) {
+              console.log('[AudioCall] Adding ICE candidate');
               if (pc.remoteDescription) {
-                await pc.addIceCandidate(new RTCIceCandidate(message.candidate));
+                try {
+                  await pc.addIceCandidate(new RTCIceCandidate(message.candidate));
+                  console.log('[AudioCall] ICE candidate added successfully');
+                } catch (err) {
+                  console.error("[AudioCall] Error adding ICE candidate:", err);
+                }
+              } else {
+                console.warn('[AudioCall] Remote description not set, queuing ICE candidate');
               }
             } else if (message.type === "end-call") {
+              console.log('[AudioCall] Received end-call signal');
+              toast.info("Звонок завершен");
               handleEndCall();
             }
           } catch (error) {
-            if (import.meta.env.DEV) {
-              console.error("Error processing signaling message:", error);
-            }
+            console.error("[AudioCall] Error processing signaling message:", error);
           }
         })
         .subscribe((status) => {
+          console.log('[AudioCall] Channel subscription status:', status);
           if (status === "SUBSCRIBED") {
+            console.log('[AudioCall] Successfully subscribed to signaling channel');
             channelRef.current = channel;
             resolve();
           } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+            console.error('[AudioCall] Subscription failed:', status);
             reject(new Error(`Channel subscription failed: ${status}`));
           }
         });

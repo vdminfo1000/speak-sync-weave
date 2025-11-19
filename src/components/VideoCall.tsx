@@ -362,19 +362,21 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
 
   const sendSignalingMessage = async (message: any) => {
     try {
-      if (import.meta.env.DEV) {
-        console.log("Sending signaling message:", message.type);
-      }
-
+      console.log('[VideoCall] Sending signaling message:', {
+        type: message.type,
+        to: otherUserId,
+        chatId
+      });
+      
       // Get auth session for secure relay
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
-        console.error("No active session for signaling");
+        console.error("[VideoCall] No active session for signaling");
         return;
       }
 
       // Send through secure edge function relay
-      const { error } = await supabase.functions.invoke('relay-signaling', {
+      const { data, error } = await supabase.functions.invoke('relay-signaling', {
         body: {
           to: otherUserId,
           message,
@@ -384,16 +386,20 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
       });
 
       if (error) {
-        console.error("Error sending signaling message:", error);
+        console.error("[VideoCall] Error sending signaling message:", error);
         toast.error("Ошибка отправки сигнала");
+      } else {
+        console.log('[VideoCall] Signaling message sent successfully:', message.type);
       }
     } catch (error) {
-      console.error("Error sending signaling message:", error);
+      console.error("[VideoCall] Error in sendSignalingMessage:", error);
     }
   };
 
   const subscribeToSignaling = async (pc: RTCPeerConnection) => {
     return new Promise<void>((resolve, reject) => {
+      console.log('[VideoCall] Subscribing to signaling channel:', `video-call-${chatId}`);
+      
       const channel = supabase
         .channel(`video-call-${chatId}`, {
           config: {
@@ -401,21 +407,26 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
           },
         })
         .on("broadcast", { event: "signaling" }, async ({ payload }) => {
+          console.log('[VideoCall] Received signaling message:', {
+            type: payload.message?.type,
+            from: payload.from,
+            to: payload.to,
+            currentUserId,
+            otherUserId
+          });
+          
           // Server-verified payload - 'from' field is now trustworthy
-          if (payload.to && payload.to !== currentUserId) return;
+          if (payload.to && payload.to !== currentUserId) {
+            console.log('[VideoCall] Message not for us, ignoring');
+            return;
+          }
 
           const { message, from } = payload;
           
           // Verify message is from expected peer
           if (from !== otherUserId) {
-            if (import.meta.env.DEV) {
-              console.warn("Received message from unexpected peer:", from);
-            }
+            console.warn('[VideoCall] Message from unexpected peer:', from, 'expected:', otherUserId);
             return;
-          }
-
-          if (import.meta.env.DEV) {
-            console.log("Received authenticated signaling message:", message.type);
           }
 
           try {
@@ -443,11 +454,15 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
               } else {
                 console.warn('[VideoCall] Invalid signaling state for answer:', pc.signalingState);
               }
-            } else if (message.type === "ice-candidate") {
+            } else if (message.type === "ice-candidate" && message.candidate) {
               console.log('[VideoCall] Processing ICE candidate');
               if (pc.remoteDescription) {
-                await pc.addIceCandidate(new RTCIceCandidate(message.candidate));
-                console.log('[VideoCall] ICE candidate added successfully');
+                try {
+                  await pc.addIceCandidate(new RTCIceCandidate(message.candidate));
+                  console.log('[VideoCall] ICE candidate added successfully');
+                } catch (err) {
+                  console.error("[VideoCall] Error adding ICE candidate:", err);
+                }
               } else {
                 console.warn('[VideoCall] Cannot add ICE candidate - no remote description yet');
               }
@@ -456,17 +471,17 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
               handleEndCall();
             }
           } catch (error) {
-            console.error("Error processing signaling message:", error);
+            console.error("[VideoCall] Error processing signaling message:", error);
           }
         })
         .subscribe((status) => {
-          if (import.meta.env.DEV) {
-            console.log("Channel subscription status:", status);
-          }
+          console.log('[VideoCall] Channel subscription status:', status);
           if (status === "SUBSCRIBED") {
+            console.log('[VideoCall] Successfully subscribed to signaling channel');
             channelRef.current = channel;
             resolve();
           } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+            console.error('[VideoCall] Subscription failed:', status);
             reject(new Error(`Channel subscription failed: ${status}`));
           }
         });

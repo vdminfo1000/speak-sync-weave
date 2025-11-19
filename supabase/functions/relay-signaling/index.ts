@@ -35,8 +35,18 @@ Deno.serve(async (req) => {
 
     // Parse request body
     const { to, message, chatId, roomId, callType } = await req.json()
+    
+    console.log('[relay-signaling] Received request:', {
+      from: user.id,
+      to,
+      messageType: message?.type,
+      chatId,
+      roomId,
+      callType
+    })
 
     if (!message || !message.type) {
+      console.error('[relay-signaling] Invalid message format:', message)
       return new Response(
         JSON.stringify({ error: 'Invalid message format' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -52,12 +62,18 @@ Deno.serve(async (req) => {
       .single()
 
     if (memberError || !membership) {
-      console.error('Membership verification failed:', memberError)
+      console.error('[relay-signaling] Membership verification failed:', {
+        userId: user.id,
+        chatId: chatId || roomId,
+        error: memberError
+      })
       return new Response(
         JSON.stringify({ error: 'Not authorized for this chat' }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
+    
+    console.log('[relay-signaling] Membership verified for user:', user.id)
 
     // Create authenticated signaling message
     // The 'from' field is now trustworthy since it's set by the server
@@ -79,11 +95,14 @@ Deno.serve(async (req) => {
     } else if (callType === 'group-audio') {
       channelName = `group-audio-call-${roomId}`
     } else {
+      console.error('[relay-signaling] Invalid call type:', callType)
       return new Response(
         JSON.stringify({ error: 'Invalid call type' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
+    
+    console.log('[relay-signaling] Broadcasting to channel:', channelName)
 
     // Send to channel using service role for reliable delivery
     const serviceSupabase = createClient(
@@ -94,6 +113,13 @@ Deno.serve(async (req) => {
     const channel = serviceSupabase.channel(channelName)
     await channel.subscribe()
     
+    console.log('[relay-signaling] Sending broadcast message:', {
+      event: 'signaling',
+      messageType: message.type,
+      from: user.id,
+      to: to
+    })
+    
     await channel.send({
       type: 'broadcast',
       event: 'signaling',
@@ -103,7 +129,7 @@ Deno.serve(async (req) => {
     // Clean up
     await serviceSupabase.removeChannel(channel)
 
-    console.log(`Relayed ${message.type} from ${user.id} to ${to || 'all'} in ${channelName}`)
+    console.log(`[relay-signaling] Successfully relayed ${message.type} from ${user.id} to ${to || 'all'} in ${channelName}`)
 
     return new Response(
       JSON.stringify({ success: true }),
