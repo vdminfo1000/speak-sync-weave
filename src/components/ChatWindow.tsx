@@ -135,42 +135,51 @@ const ChatWindow = ({ chatId, onBack, onStartCall }: ChatWindowProps) => {
           table: "messages",
           filter: `chat_id=eq.${chatId}`,
         },
-        async (payload) => {
+        (payload) => {
           console.log("[ChatWindow] New message INSERT event:", payload);
           const newMsg = payload.new as any;
           
-          // Fetch sender profile
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("username, full_name, avatar_url")
-            .eq("id", newMsg.sender_id)
-            .single();
-
-          // Fetch replied message if exists
-          let replied_message = null;
-          if (newMsg.replied_to_message_id) {
-            const { data: repliedMsg } = await supabase
-              .from("messages")
-              .select("content, sender:sender_id(username)")
-              .eq("id", newMsg.replied_to_message_id)
-              .single();
-            replied_message = repliedMsg;
-          }
-
-          const messageWithSender = {
-            ...newMsg,
-            sender: profile,
-            read_by: [],
-            delivered_to: [],
-            replied_message
-          };
-
+          // Immediately add message to state for instant display
           setMessages(prev => {
             // Check if message already exists to avoid duplicates
             if (prev.some(m => m.id === newMsg.id)) {
               return prev;
             }
-            return [...prev, messageWithSender];
+            
+            // Add message with placeholder sender info
+            return [...prev, {
+              ...newMsg,
+              sender: { username: '', full_name: null, avatar_url: null },
+              read_by: [],
+              delivered_to: [],
+              replied_message: null
+            }];
+          });
+
+          // Fetch additional data asynchronously and update
+          Promise.all([
+            supabase
+              .from("profiles")
+              .select("username, full_name, avatar_url")
+              .eq("id", newMsg.sender_id)
+              .single(),
+            newMsg.replied_to_message_id ? 
+              supabase
+                .from("messages")
+                .select("content, sender:sender_id(username)")
+                .eq("id", newMsg.replied_to_message_id)
+                .single() 
+              : Promise.resolve({ data: null })
+          ]).then(([profileResult, repliedMsgResult]) => {
+            setMessages(prev => prev.map(msg => 
+              msg.id === newMsg.id 
+                ? {
+                    ...msg,
+                    sender: profileResult.data,
+                    replied_message: repliedMsgResult.data
+                  }
+                : msg
+            ));
           });
         }
       )

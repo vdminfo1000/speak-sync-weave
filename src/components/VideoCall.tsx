@@ -382,12 +382,12 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
       // Подписываемся на сообщения сигнализации ПЕРЕД созданием offer
       await subscribeToSignaling(pc);
 
-      // Если мы инициатор звонка, создаем offer
+      // Если мы инициатор звонка, создаем offer с оптимизацией для низкой задержки
       if (isInitiator) {
         console.log('[VideoCall] Creating offer as initiator');
-        // Даем время получателю подписаться на канал (2 секунды)
-        console.log('[VideoCall] Waiting 2 seconds for receiver to subscribe...');
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Даем время получателю подписаться на канал (1 секунда - уменьшено для быстрого соединения)
+        console.log('[VideoCall] Waiting 1 second for receiver to subscribe...');
+        await new Promise(resolve => setTimeout(resolve, 1000));
         console.log('[VideoCall] Proceeding with offer creation');
         
         const offer = await pc.createOffer({
