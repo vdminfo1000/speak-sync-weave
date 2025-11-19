@@ -59,9 +59,13 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
   useEffect(() => {
     if (!isOpen) return;
 
-    if (import.meta.env.DEV) {
-      console.log("AudioCall opened, isInitiator:", isInitiator);
-    }
+    console.log('[AudioCall] Component opened:', {
+      isInitiator,
+      currentUserId,
+      otherUserId,
+      chatId,
+      timestamp: new Date().toISOString()
+    });
 
     // Записываем начало звонка
     if (isInitiator) {
@@ -287,8 +291,10 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
       // Если мы инициатор звонка, создаем offer
       if (isInitiator) {
         console.log('[AudioCall] Creating offer as initiator');
-        // Даем время на полную подписку канала
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // Даем время получателю подписаться на канал (2 секунды)
+        console.log('[AudioCall] Waiting 2 seconds for receiver to subscribe...');
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        console.log('[AudioCall] Proceeding with offer creation');
         
         const offer = await pc.createOffer({
           offerToReceiveAudio: true,
@@ -364,12 +370,18 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
             from: payload.from,
             to: payload.to,
             currentUserId,
-            otherUserId
+            otherUserId,
+            timestamp: new Date().toISOString()
           });
           
-          // Server-verified payload - 'from' field is now trustworthy
+          // Строгая фильтрация: сообщение должно быть ОТ другого пользователя И ДЛЯ нас
+          if (payload.from === currentUserId) {
+            console.log('[AudioCall] Ignoring our own message');
+            return;
+          }
+          
           if (payload.to && payload.to !== currentUserId) {
-            console.log('[AudioCall] Message not for us, ignoring');
+            console.log('[AudioCall] Message is for someone else:', payload.to);
             return;
           }
 
@@ -421,13 +433,19 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
           }
         })
         .subscribe((status) => {
-          console.log('[AudioCall] Channel subscription status:', status);
+          console.log('[AudioCall] Channel subscription status:', status, {
+            chatId,
+            currentUserId,
+            otherUserId,
+            isInitiator,
+            timestamp: new Date().toISOString()
+          });
           if (status === "SUBSCRIBED") {
-            console.log('[AudioCall] Successfully subscribed to signaling channel');
+            console.log('[AudioCall] ✓ Successfully subscribed to signaling channel - ready to receive messages');
             channelRef.current = channel;
             resolve();
           } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-            console.error('[AudioCall] Subscription failed:', status);
+            console.error('[AudioCall] ✗ Subscription failed:', status);
             reject(new Error(`Channel subscription failed: ${status}`));
           }
         });
