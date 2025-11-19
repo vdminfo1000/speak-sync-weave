@@ -42,6 +42,10 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
   const callTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const statsIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const originalStreamRef = useRef<MediaStream | null>(null);
+  const iceCandidatesQueue = useRef<RTCIceCandidateInit[]>([]);
+  const isProcessingQueue = useRef(false);
+  const reconnectAttempts = useRef(0);
+  const maxReconnectAttempts = 3;
 
   const { recordCall, updateCallStatus } = useCallHistory(currentUserId);
 
@@ -445,45 +449,56 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
             if (message.type === "offer") {
               console.log('[VideoCall] Processing offer from peer');
               await pc.setRemoteDescription(new RTCSessionDescription(message.offer));
-              console.log('[VideoCall] Remote description set (offer)');
+              console.log('[VideoCall] ✓ Remote description set (offer)');
+              
+              // Обрабатываем очередь ICE candidates после установки remote description
+              await processQueuedIceCandidates(pc);
               
               const answer = await pc.createAnswer();
               console.log('[VideoCall] Answer created');
               
               await pc.setLocalDescription(answer);
-              console.log('[VideoCall] Local description set (answer)');
+              console.log('[VideoCall] ✓ Local description set (answer)');
               
               await sendSignalingMessage({
                 type: "answer",
                 answer: answer,
               });
-              console.log('[VideoCall] Answer sent to peer');
+              console.log('[VideoCall] ✓ Answer sent to peer');
             } else if (message.type === "answer") {
-              console.log('[VideoCall] Processing answer from peer, signaling state:', pc.signalingState);
+              console.log('[VideoCall] Processing answer from peer');
+              console.log('[VideoCall] Current signaling state:', pc.signalingState);
+              
               if (pc.signalingState === "have-local-offer") {
                 await pc.setRemoteDescription(new RTCSessionDescription(message.answer));
-                console.log('[VideoCall] Remote description set (answer)');
+                console.log('[VideoCall] ✓ Remote description set (answer)');
+                
+                // Обрабатываем очередь ICE candidates после установки remote description
+                await processQueuedIceCandidates(pc);
               } else {
-                console.warn('[VideoCall] Invalid signaling state for answer:', pc.signalingState);
+                console.warn('[VideoCall] ⚠ Cannot set answer - invalid signaling state:', pc.signalingState);
               }
             } else if (message.type === "ice-candidate" && message.candidate) {
-              console.log('[VideoCall] Processing ICE candidate');
+              console.log('[VideoCall] Received ICE candidate');
+              
               if (pc.remoteDescription) {
                 try {
                   await pc.addIceCandidate(new RTCIceCandidate(message.candidate));
-                  console.log('[VideoCall] ICE candidate added successfully');
+                  console.log('[VideoCall] ✓ ICE candidate added successfully');
                 } catch (err) {
-                  console.error("[VideoCall] Error adding ICE candidate:", err);
+                  console.error("[VideoCall] ✗ Error adding ICE candidate:", err);
                 }
               } else {
-                console.warn('[VideoCall] Cannot add ICE candidate - no remote description yet');
+                console.warn('[VideoCall] ⚠ Queueing ICE candidate (no remote description)');
+                iceCandidatesQueue.current.push(message.candidate);
               }
             } else if (message.type === "end-call") {
-              console.log('[VideoCall] Call ended by remote peer');
+              console.log('[VideoCall] Received end-call signal');
               handleEndCall();
             }
           } catch (error) {
-            console.error("[VideoCall] Error processing signaling message:", error);
+            console.error("[VideoCall] ✗ Error processing signaling message:", error);
+            toast.error("Ошибка обработки сигнала");
           }
         })
         .subscribe((status) => {
@@ -579,6 +594,29 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
     }
   };
 
+  const processQueuedIceCandidates = async (pc: RTCPeerConnection) => {
+    if (isProcessingQueue.current || iceCandidatesQueue.current.length === 0) {
+      return;
+    }
+
+    isProcessingQueue.current = true;
+    console.log(`[VideoCall] Processing ${iceCandidatesQueue.current.length} queued ICE candidates`);
+
+    const queue = [...iceCandidatesQueue.current];
+    iceCandidatesQueue.current = [];
+
+    for (const candidate of queue) {
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        console.log('[VideoCall] ✓ Queued ICE candidate added');
+      } catch (err) {
+        console.error('[VideoCall] ✗ Error adding queued ICE candidate:', err);
+      }
+    }
+
+    isProcessingQueue.current = false;
+  };
+
   const startQualityMonitoring = (pc: RTCPeerConnection) => {
     if (statsIntervalRef.current) {
       clearInterval(statsIntervalRef.current);
@@ -670,45 +708,35 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
   };
 
   const cleanup = () => {
-    if (import.meta.env.DEV) {
-      console.log("Cleaning up video call resources");
-    }
+    console.log('[VideoCall] Cleaning up call resources');
     
-    // Stop all local tracks
+    // Stop local tracks
     if (localStream) {
-      localStream.getTracks().forEach(track => {
+      localStream.getTracks().forEach((track) => {
         track.stop();
-        if (import.meta.env.DEV) {
-          console.log("Stopped local track:", track.kind);
-        }
+        console.log(`[VideoCall] Stopped local ${track.kind} track`);
       });
     }
     
-    // Stop all remote tracks
+    // Stop remote tracks
     if (remoteStream) {
-      remoteStream.getTracks().forEach(track => {
+      remoteStream.getTracks().forEach((track) => {
         track.stop();
-        if (import.meta.env.DEV) {
-          console.log("Stopped remote track:", track.kind);
-        }
+        console.log(`[VideoCall] Stopped remote ${track.kind} track`);
       });
     }
     
     // Close peer connection
     if (peerConnection) {
       peerConnection.close();
-      if (import.meta.env.DEV) {
-        console.log("Closed peer connection");
-      }
+      console.log('[VideoCall] Peer connection closed');
     }
     
     // Remove Supabase channel
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current);
       channelRef.current = null;
-      if (import.meta.env.DEV) {
-        console.log("Removed Supabase channel");
-      }
+      console.log('[VideoCall] Signaling channel removed');
     }
     
     // Clear timers
@@ -725,11 +753,16 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
       statsIntervalRef.current = null;
     }
     
+    // Clear queues and refs
+    iceCandidatesQueue.current = [];
+    reconnectAttempts.current = 0;
+    
     setLocalStream(null);
     setRemoteStream(null);
     setPeerConnection(null);
     setCallStatus("ended");
     setCallDuration(0);
+    console.log('[VideoCall] Cleanup complete');
   };
 
   if (isMinimized) {
