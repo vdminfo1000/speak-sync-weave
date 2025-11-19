@@ -17,34 +17,39 @@ import DigitalID from "./pages/DigitalID";
 import IntegrationsPage from "./pages/IntegrationsPage";
 import Travel from "./pages/Travel";
 import Help from "./pages/Help";
+import ErrorBoundary from "./components/ErrorBoundary";
+import ErrorMonitor from "./components/ErrorMonitor";
 
 const queryClient = new QueryClient();
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/auth" element={<Auth />} />
-          <Route path="/messenger" element={<Messenger />} />
-          <Route path="/profile" element={<Profile />} />
-        <Route path="/social-network" element={<SocialNetwork />} />
-        <Route path="/user/:userId" element={<UserProfile />} />
-          <Route path="/business-environment" element={<BusinessEnvironment />} />
-          <Route path="/document-management" element={<DocumentManagement />} />
-          <Route path="/wallet" element={<Wallet />} />
-          <Route path="/digital-id" element={<DigitalID />} />
-          <Route path="/integrations" element={<IntegrationsPage />} />
-          <Route path="/travel" element={<Travel />} />
-          <Route path="/help" element={<Help />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
+  <ErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <ErrorMonitor />
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<Index />} />
+            <Route path="/auth" element={<Auth />} />
+            <Route path="/messenger" element={<Messenger />} />
+            <Route path="/profile" element={<Profile />} />
+          <Route path="/social-network" element={<SocialNetwork />} />
+          <Route path="/user/:userId" element={<UserProfile />} />
+            <Route path="/business-environment" element={<BusinessEnvironment />} />
+            <Route path="/document-management" element={<DocumentManagement />} />
+            <Route path="/wallet" element={<Wallet />} />
+            <Route path="/digital-id" element={<DigitalID />} />
+            <Route path="/integrations" element={<IntegrationsPage />} />
+            <Route path="/travel" element={<Travel />} />
+            <Route path="/help" element={<Help />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </TooltipProvider>
+    </QueryClientProvider>
+  </ErrorBoundary>
 );
 
 export default App;
