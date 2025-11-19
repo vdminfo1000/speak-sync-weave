@@ -185,10 +185,15 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
 
       // Добавляем локальные треки с настройками для лучшего качества
       stream.getTracks().forEach((track) => {
-        if (import.meta.env.DEV) {
-          console.log("Adding track:", track.kind);
-        }
+        console.log(`[VideoCall] Adding local ${track.kind} track:`, {
+          id: track.id,
+          label: track.label,
+          enabled: track.enabled,
+          readyState: track.readyState,
+          muted: track.muted
+        });
         const sender = pc.addTrack(track, stream);
+        console.log(`[VideoCall] Track ${track.kind} added to peer connection`);
         
         // Настраиваем параметры отправки для видео
         if (track.kind === 'video') {
@@ -198,19 +203,47 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
           }
           params.encodings[0].maxBitrate = 2000000; // 2 Mbps
           params.encodings[0].maxFramerate = 30;
-          sender.setParameters(params);
+          sender.setParameters(params).then(() => {
+            console.log('[VideoCall] Video encoding parameters set successfully');
+          }).catch(err => {
+            console.error('[VideoCall] Failed to set video parameters:', err);
+          });
         }
       });
 
       // Обрабатываем входящие треки
       pc.ontrack = (event) => {
-        if (import.meta.env.DEV) {
-          console.log("Received remote track:", event.track.kind);
+        console.log(`[VideoCall] Received remote ${event.track.kind} track:`, {
+          trackId: event.track.id,
+          trackLabel: event.track.label,
+          trackEnabled: event.track.enabled,
+          trackReadyState: event.track.readyState,
+          trackMuted: event.track.muted,
+          streamId: event.streams[0]?.id,
+          streamActive: event.streams[0]?.active,
+          streamTracks: event.streams[0]?.getTracks().length
+        });
+        
+        const [stream] = event.streams;
+        if (!stream) {
+          console.error('[VideoCall] No stream in track event!');
+          return;
         }
-        const [remoteStream] = event.streams;
-        setRemoteStream(remoteStream);
+        
+        setRemoteStream(stream);
+        
         if (remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = remoteStream;
+          remoteVideoRef.current.srcObject = stream;
+          console.log('[VideoCall] Remote stream attached to video element');
+          
+          // Принудительно воспроизводим видео
+          remoteVideoRef.current.play().then(() => {
+            console.log('[VideoCall] Remote video playing');
+          }).catch(err => {
+            console.error('[VideoCall] Failed to play remote video:', err);
+          });
+        } else {
+          console.error('[VideoCall] Remote video ref is null!');
         }
       };
 
@@ -233,12 +266,16 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
 
       // Обрабатываем изменение состояния соединения с улучшенным reconnection
       pc.oniceconnectionstatechange = () => {
-        if (import.meta.env.DEV) {
-          console.log("ICE connection state:", pc.iceConnectionState);
-        }
+        console.log('[VideoCall] ICE connection state changed:', {
+          iceConnectionState: pc.iceConnectionState,
+          iceGatheringState: pc.iceGatheringState,
+          signalingState: pc.signalingState,
+          connectionState: pc.connectionState
+        });
         
         if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
           if (callStatus !== "connected") {
+            console.log('[VideoCall] Call successfully connected!');
             setCallStatus("connected");
             toast.success("Звонок подключен");
             if (isInitiator) {
@@ -246,7 +283,7 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
             }
           }
         } else if (pc.iceConnectionState === "failed") {
-          console.warn("ICE connection failed, attempting restart");
+          console.error('[VideoCall] ICE connection failed, attempting restart');
           if (pc.restartIce) {
             pc.restartIce();
           } else {
@@ -277,9 +314,7 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
 
       // Если мы инициатор звонка, создаем offer
       if (isInitiator) {
-        if (import.meta.env.DEV) {
-          console.log("Creating offer as initiator");
-        }
+        console.log('[VideoCall] Creating offer as initiator');
         // Даем время на полную подписку канала
         await new Promise(resolve => setTimeout(resolve, 500));
         
@@ -287,14 +322,16 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
           offerToReceiveAudio: true,
           offerToReceiveVideo: true,
         });
+        console.log('[VideoCall] Offer created:', offer.type);
+        
         await pc.setLocalDescription(offer);
-        if (import.meta.env.DEV) {
-          console.log("Sending offer");
-        }
+        console.log('[VideoCall] Local description set (offer)');
+        
         await sendSignalingMessage({
           type: "offer",
           offer: offer,
         });
+        console.log('[VideoCall] Offer sent to peer');
       }
 
     } catch (error) {
@@ -364,37 +401,39 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
 
           try {
             if (message.type === "offer") {
-              if (import.meta.env.DEV) {
-                console.log("Processing offer");
-              }
+              console.log('[VideoCall] Processing offer from peer');
               await pc.setRemoteDescription(new RTCSessionDescription(message.offer));
+              console.log('[VideoCall] Remote description set (offer)');
+              
               const answer = await pc.createAnswer();
+              console.log('[VideoCall] Answer created');
+              
               await pc.setLocalDescription(answer);
-              if (import.meta.env.DEV) {
-                console.log("Sending answer");
-              }
+              console.log('[VideoCall] Local description set (answer)');
+              
               await sendSignalingMessage({
                 type: "answer",
                 answer: answer,
               });
+              console.log('[VideoCall] Answer sent to peer');
             } else if (message.type === "answer") {
-              if (import.meta.env.DEV) {
-                console.log("Processing answer");
-              }
+              console.log('[VideoCall] Processing answer from peer, signaling state:', pc.signalingState);
               if (pc.signalingState === "have-local-offer") {
                 await pc.setRemoteDescription(new RTCSessionDescription(message.answer));
+                console.log('[VideoCall] Remote description set (answer)');
+              } else {
+                console.warn('[VideoCall] Invalid signaling state for answer:', pc.signalingState);
               }
             } else if (message.type === "ice-candidate") {
-              if (import.meta.env.DEV) {
-                console.log("Adding ICE candidate");
-              }
+              console.log('[VideoCall] Processing ICE candidate');
               if (pc.remoteDescription) {
                 await pc.addIceCandidate(new RTCIceCandidate(message.candidate));
+                console.log('[VideoCall] ICE candidate added successfully');
+              } else {
+                console.warn('[VideoCall] Cannot add ICE candidate - no remote description yet');
               }
             } else if (message.type === "end-call") {
-              if (import.meta.env.DEV) {
-                console.log("Call ended by remote peer");
-              }
+              console.log('[VideoCall] Call ended by remote peer');
               handleEndCall();
             }
           } catch (error) {
