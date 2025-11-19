@@ -51,7 +51,13 @@ const GroupVideoCall = ({
       { urls: "stun:stun.l.google.com:19302" },
       { urls: "stun:stun1.l.google.com:19302" },
       { urls: "stun:stun2.l.google.com:19302" },
+      { urls: "stun:stun3.l.google.com:19302" },
+      { urls: "stun:stun4.l.google.com:19302" },
     ],
+    iceTransportPolicy: 'all' as RTCIceTransportPolicy,
+    bundlePolicy: 'max-bundle' as RTCBundlePolicy,
+    rtcpMuxPolicy: 'require' as RTCRtcpMuxPolicy,
+    iceCandidatePoolSize: 10,
   };
 
   useEffect(() => {
@@ -181,25 +187,51 @@ const GroupVideoCall = ({
       );
     };
 
-    // Обрабатываем ICE candidates
-    pc.onicecandidate = (event) => {
+    // Обрабатываем ICE candidates с улучшенной обработкой ошибок
+    pc.onicecandidate = async (event) => {
       if (event.candidate) {
         if (import.meta.env.DEV) {
           console.log(`Sending ICE candidate to ${targetUserId}`);
         }
-        sendSignalingMessage({
-          type: "ice-candidate",
-          candidate: event.candidate,
-        }, targetUserId);
+        try {
+          await sendSignalingMessage({
+            type: "ice-candidate",
+            candidate: event.candidate,
+          }, targetUserId);
+        } catch (error) {
+          console.error(`Failed to send ICE candidate to ${targetUserId}:`, error);
+        }
       }
     };
 
+    // Улучшенная обработка состояния соединения
     pc.oniceconnectionstatechange = () => {
       if (import.meta.env.DEV) {
         console.log(`ICE connection state with ${targetUserId}:`, pc.iceConnectionState);
       }
-      if (pc.iceConnectionState === "failed" || pc.iceConnectionState === "disconnected") {
-        toast.error(`Потеряно соединение с участником`);
+      
+      if (pc.iceConnectionState === "failed") {
+        console.warn(`ICE connection failed with ${targetUserId}, attempting restart`);
+        if (pc.restartIce) {
+          pc.restartIce();
+        } else {
+          toast.error(`Потеряно соединение с участником`);
+        }
+      } else if (pc.iceConnectionState === "disconnected") {
+        console.warn(`Disconnected from ${targetUserId}, waiting for reconnection`);
+      } else if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
+        console.log(`Successfully connected to ${targetUserId}`);
+      }
+    };
+
+    // Мониторинг общего состояния соединения
+    pc.onconnectionstatechange = () => {
+      if (import.meta.env.DEV) {
+        console.log(`Connection state with ${targetUserId}:`, pc.connectionState);
+      }
+      
+      if (pc.connectionState === 'failed') {
+        console.error(`Connection completely failed with ${targetUserId}`);
       }
     };
 

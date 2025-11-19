@@ -41,7 +41,13 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
       { urls: "stun:stun.l.google.com:19302" },
       { urls: "stun:stun1.l.google.com:19302" },
       { urls: "stun:stun2.l.google.com:19302" },
+      { urls: "stun:stun3.l.google.com:19302" },
+      { urls: "stun:stun4.l.google.com:19302" },
     ],
+    iceTransportPolicy: 'all' as RTCIceTransportPolicy,
+    bundlePolicy: 'max-bundle' as RTCBundlePolicy,
+    rtcpMuxPolicy: 'require' as RTCRtcpMuxPolicy,
+    iceCandidatePoolSize: 10,
   };
 
   useEffect(() => {
@@ -184,38 +190,60 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
         if (remoteVideoRef.current) {
           remoteVideoRef.current.srcObject = remoteStream;
         }
-        setCallStatus("connected");
-        toast.success("Звонок подключен");
-
-        // Обновляем статус звонка на "connected"
-        if (isInitiator) {
-          updateCallStatus(currentUserId, otherUserId, callStartTime, "completed");
-        }
       };
 
-      // Обрабатываем ICE candidates
-      pc.onicecandidate = (event) => {
+      // Обрабатываем ICE candidates с улучшенной обработкой ошибок
+      pc.onicecandidate = async (event) => {
         if (event.candidate) {
           if (import.meta.env.DEV) {
             console.log("Sending ICE candidate");
           }
-          sendSignalingMessage({
-            type: "ice-candidate",
-            candidate: event.candidate,
-          });
+          try {
+            await sendSignalingMessage({
+              type: "ice-candidate",
+              candidate: event.candidate,
+            });
+          } catch (error) {
+            console.error("Failed to send ICE candidate:", error);
+          }
         }
       };
 
-      // Обрабатываем изменение состояния соединения
+      // Обрабатываем изменение состояния соединения с улучшенным reconnection
       pc.oniceconnectionstatechange = () => {
         if (import.meta.env.DEV) {
           console.log("ICE connection state:", pc.iceConnectionState);
         }
-        if (pc.iceConnectionState === "connected") {
-          setCallStatus("connected");
-        } else if (pc.iceConnectionState === "failed" || pc.iceConnectionState === "disconnected") {
-          toast.error("Потеряно соединение");
-          handleEndCall();
+        
+        if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
+          if (callStatus !== "connected") {
+            setCallStatus("connected");
+            toast.success("Звонок подключен");
+            if (isInitiator) {
+              updateCallStatus(currentUserId, otherUserId, callStartTime, "completed");
+            }
+          }
+        } else if (pc.iceConnectionState === "failed") {
+          console.warn("ICE connection failed, attempting restart");
+          if (pc.restartIce) {
+            pc.restartIce();
+          } else {
+            toast.error("Потеряно соединение");
+            handleEndCall();
+          }
+        } else if (pc.iceConnectionState === "disconnected") {
+          toast.warning("Переподключение...");
+        }
+      };
+
+      // Мониторинг общего состояния соединения
+      pc.onconnectionstatechange = () => {
+        if (import.meta.env.DEV) {
+          console.log("Connection state:", pc.connectionState);
+        }
+        
+        if (pc.connectionState === 'failed') {
+          toast.error("Соединение потеряно");
         }
       };
 
