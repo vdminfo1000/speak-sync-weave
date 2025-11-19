@@ -27,26 +27,36 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
   const [isMinimized, setIsMinimized] = useState(false);
   const [showInviteDialog, setShowInviteDialog] = useState(false);
   const [callStartTime] = useState(new Date().toISOString());
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [connectionQuality, setConnectionQuality] = useState<{
+    ping: number;
+    packetLoss: number;
+    videoQuality: string;
+    audioQuality: string;
+  }>({ ping: 0, packetLoss: 0, videoQuality: 'good', audioQuality: 'good' });
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const channelRef = useRef<any>(null);
   const callTimerRef = useRef<NodeJS.Timeout | null>(null);
   const callTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const statsIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const originalStreamRef = useRef<MediaStream | null>(null);
 
   const { recordCall, updateCallStatus } = useCallHistory(currentUserId);
 
-  const configuration = {
+  const configuration: RTCConfiguration = {
     iceServers: [
       { urls: "stun:stun.l.google.com:19302" },
       { urls: "stun:stun1.l.google.com:19302" },
       { urls: "stun:stun2.l.google.com:19302" },
       { urls: "stun:stun3.l.google.com:19302" },
       { urls: "stun:stun4.l.google.com:19302" },
+      { urls: "stun:global.stun.twilio.com:3478" },
     ],
-    iceTransportPolicy: 'all' as RTCIceTransportPolicy,
-    bundlePolicy: 'max-bundle' as RTCBundlePolicy,
-    rtcpMuxPolicy: 'require' as RTCRtcpMuxPolicy,
+    iceTransportPolicy: 'all',
+    bundlePolicy: 'max-bundle',
+    rtcpMuxPolicy: 'require',
     iceCandidatePoolSize: 10,
   };
 
@@ -168,16 +178,28 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
       // Создаем peer connection
       const pc = new RTCPeerConnection(configuration);
       setPeerConnection(pc);
+      originalStreamRef.current = stream;
       if (import.meta.env.DEV) {
         console.log("PeerConnection created");
       }
 
-      // Добавляем локальные треки
+      // Добавляем локальные треки с настройками для лучшего качества
       stream.getTracks().forEach((track) => {
         if (import.meta.env.DEV) {
           console.log("Adding track:", track.kind);
         }
-        pc.addTrack(track, stream);
+        const sender = pc.addTrack(track, stream);
+        
+        // Настраиваем параметры отправки для видео
+        if (track.kind === 'video') {
+          const params = sender.getParameters();
+          if (!params.encodings) {
+            params.encodings = [{}];
+          }
+          params.encodings[0].maxBitrate = 2000000; // 2 Mbps
+          params.encodings[0].maxFramerate = 30;
+          sender.setParameters(params);
+        }
       });
 
       // Обрабатываем входящие треки
@@ -244,6 +266,9 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
         
         if (pc.connectionState === 'failed') {
           toast.error("Соединение потеряно");
+        } else if (pc.connectionState === 'connected') {
+          // Начинаем мониторинг качества связи
+          startQualityMonitoring(pc);
         }
       };
 
@@ -408,6 +433,112 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
     }
   };
 
+  const toggleScreenShare = async () => {
+    if (!peerConnection) return;
+
+    try {
+      if (isScreenSharing) {
+        // Возвращаемся к камере
+        if (originalStreamRef.current) {
+          const videoTrack = originalStreamRef.current.getVideoTracks()[0];
+          const sender = peerConnection.getSenders().find(s => s.track?.kind === 'video');
+          
+          if (sender && videoTrack) {
+            await sender.replaceTrack(videoTrack);
+            setLocalStream(originalStreamRef.current);
+            if (localVideoRef.current) {
+              localVideoRef.current.srcObject = originalStreamRef.current;
+            }
+          }
+        }
+        setIsScreenSharing(false);
+        toast.success("Демонстрация экрана остановлена");
+      } else {
+        // Начинаем демонстрацию экрана
+        const screenStream = await navigator.mediaDevices.getDisplayMedia({
+          video: { 
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            frameRate: { ideal: 30 }
+          }
+        });
+
+        const screenTrack = screenStream.getVideoTracks()[0];
+        const sender = peerConnection.getSenders().find(s => s.track?.kind === 'video');
+
+        if (sender) {
+          await sender.replaceTrack(screenTrack);
+          setLocalStream(screenStream);
+          if (localVideoRef.current) {
+            localVideoRef.current.srcObject = screenStream;
+          }
+
+          // Обработка окончания демонстрации экрана
+          screenTrack.onended = () => {
+            toggleScreenShare();
+          };
+        }
+        
+        setIsScreenSharing(true);
+        toast.success("Демонстрация экрана начата");
+      }
+    } catch (error) {
+      console.error("Error toggling screen share:", error);
+      toast.error("Не удалось переключить демонстрацию экрана");
+    }
+  };
+
+  const startQualityMonitoring = (pc: RTCPeerConnection) => {
+    if (statsIntervalRef.current) {
+      clearInterval(statsIntervalRef.current);
+    }
+
+    statsIntervalRef.current = setInterval(async () => {
+      try {
+        const stats = await pc.getStats();
+        let packetsLost = 0;
+        let packetsReceived = 0;
+        let currentRoundTripTime = 0;
+
+        stats.forEach((report) => {
+          if (report.type === 'inbound-rtp') {
+            if (report.packetsLost !== undefined) {
+              packetsLost += report.packetsLost;
+            }
+            if (report.packetsReceived !== undefined) {
+              packetsReceived += report.packetsReceived;
+            }
+          }
+          if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+            if (report.currentRoundTripTime !== undefined) {
+              currentRoundTripTime = report.currentRoundTripTime * 1000; // convert to ms
+            }
+          }
+        });
+
+        const packetLoss = packetsReceived > 0 
+          ? (packetsLost / (packetsLost + packetsReceived)) * 100 
+          : 0;
+
+        const quality = {
+          ping: Math.round(currentRoundTripTime),
+          packetLoss: Math.round(packetLoss * 100) / 100,
+          videoQuality: packetLoss < 5 ? 'good' : packetLoss < 15 ? 'fair' : 'poor',
+          audioQuality: packetLoss < 3 ? 'good' : packetLoss < 10 ? 'fair' : 'poor',
+        };
+
+        setConnectionQuality(quality);
+
+        // Предупреждение при плохом качестве
+        if (quality.videoQuality === 'poor' || quality.audioQuality === 'poor') {
+          toast.warning("Плохое качество связи");
+        }
+      } catch (error) {
+        console.error("Error getting stats:", error);
+      }
+    }, 3000); // Обновляем каждые 3 секунды
+  };
+
   const handleEndCall = () => {
     // Обновляем статус звонка
     if (isInitiator) {
@@ -497,6 +628,10 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
     if (callTimeoutRef.current) {
       clearTimeout(callTimeoutRef.current);
       callTimeoutRef.current = null;
+    }
+    if (statsIntervalRef.current) {
+      clearInterval(statsIntervalRef.current);
+      statsIntervalRef.current = null;
     }
     
     setLocalStream(null);
@@ -627,6 +762,32 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
             </div>
           </div>
 
+          {/* Индикаторы качества связи */}
+          {callStatus === "connected" && (
+            <div className="flex justify-center gap-4 text-xs text-muted-foreground mb-2">
+              <div className="flex items-center gap-1">
+                <span>Пинг: {connectionQuality.ping}мс</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span>Потери: {connectionQuality.packetLoss}%</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className={`w-2 h-2 rounded-full ${
+                  connectionQuality.videoQuality === 'good' ? 'bg-green-500' :
+                  connectionQuality.videoQuality === 'fair' ? 'bg-yellow-500' : 'bg-red-500'
+                }`} />
+                <span>Видео</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className={`w-2 h-2 rounded-full ${
+                  connectionQuality.audioQuality === 'good' ? 'bg-green-500' :
+                  connectionQuality.audioQuality === 'fair' ? 'bg-yellow-500' : 'bg-red-500'
+                }`} />
+                <span>Аудио</span>
+              </div>
+            </div>
+          )}
+
           {/* Элементы управления */}
           <div className="flex justify-center gap-4">
             <Button
@@ -645,6 +806,18 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
               className="rounded-full w-12 h-12"
             >
               {isVideoOff ? <VideoOff className="w-5 h-5" /> : <VideoIcon className="w-5 h-5" />}
+            </Button>
+
+            <Button
+              variant={isScreenSharing ? "default" : "secondary"}
+              size="icon"
+              onClick={toggleScreenShare}
+              className="rounded-full w-12 h-12"
+              title={isScreenSharing ? "Остановить демонстрацию экрана" : "Демонстрация экрана"}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
             </Button>
 
             <Button

@@ -27,25 +27,32 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
   const [isMinimized, setIsMinimized] = useState(false);
   const [showInviteDialog, setShowInviteDialog] = useState(false);
   const [callStartTime] = useState(new Date().toISOString());
+  const [connectionQuality, setConnectionQuality] = useState<{
+    ping: number;
+    packetLoss: number;
+    audioQuality: string;
+  }>({ ping: 0, packetLoss: 0, audioQuality: 'good' });
   
   const audioRef = useRef<HTMLAudioElement>(null);
   const channelRef = useRef<any>(null);
   const callTimerRef = useRef<NodeJS.Timeout | null>(null);
   const callTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const statsIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const { recordCall, updateCallStatus } = useCallHistory(currentUserId);
 
-  const configuration = {
+  const configuration: RTCConfiguration = {
     iceServers: [
       { urls: "stun:stun.l.google.com:19302" },
       { urls: "stun:stun1.l.google.com:19302" },
       { urls: "stun:stun2.l.google.com:19302" },
       { urls: "stun:stun3.l.google.com:19302" },
       { urls: "stun:stun4.l.google.com:19302" },
+      { urls: "stun:global.stun.twilio.com:3478" },
     ],
-    iceTransportPolicy: 'all' as RTCIceTransportPolicy,
-    bundlePolicy: 'max-bundle' as RTCBundlePolicy,
-    rtcpMuxPolicy: 'require' as RTCRtcpMuxPolicy,
+    iceTransportPolicy: 'all',
+    bundlePolicy: 'max-bundle',
+    rtcpMuxPolicy: 'require',
     iceCandidatePoolSize: 10,
   };
 

@@ -40,23 +40,31 @@ const GroupVideoCall = ({
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [callDuration, setCallDuration] = useState(0);
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
+  const [connectionQuality, setConnectionQuality] = useState<{
+    ping: number;
+    packetLoss: number;
+    videoQuality: string;
+    audioQuality: string;
+  }>({ ping: 0, packetLoss: 0, videoQuality: 'good', audioQuality: 'good' });
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
   const channelRef = useRef<any>(null);
   const callTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const statsIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const configuration = {
+  const configuration: RTCConfiguration = {
     iceServers: [
       { urls: "stun:stun.l.google.com:19302" },
       { urls: "stun:stun1.l.google.com:19302" },
       { urls: "stun:stun2.l.google.com:19302" },
       { urls: "stun:stun3.l.google.com:19302" },
       { urls: "stun:stun4.l.google.com:19302" },
+      { urls: "stun:global.stun.twilio.com:3478" },
     ],
-    iceTransportPolicy: 'all' as RTCIceTransportPolicy,
-    bundlePolicy: 'max-bundle' as RTCBundlePolicy,
-    rtcpMuxPolicy: 'require' as RTCRtcpMuxPolicy,
+    iceTransportPolicy: 'all',
+    bundlePolicy: 'max-bundle',
+    rtcpMuxPolicy: 'require',
     iceCandidatePoolSize: 10,
   };
 
