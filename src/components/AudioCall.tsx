@@ -647,28 +647,34 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
         track.stop();
         console.log(`[AudioCall] Stopped ${track.kind} track`);
       });
+      setLocalStream(null);
     }
     
     if (peerConnection) {
       peerConnection.close();
       console.log('[AudioCall] Peer connection closed');
+      setPeerConnection(null);
     }
     
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
       console.log('[AudioCall] Signaling channel removed');
     }
     
     if (callTimerRef.current) {
       clearInterval(callTimerRef.current);
+      callTimerRef.current = null;
     }
     
     if (callTimeoutRef.current) {
       clearTimeout(callTimeoutRef.current);
+      callTimeoutRef.current = null;
     }
     
     if (statsIntervalRef.current) {
       clearInterval(statsIntervalRef.current);
+      statsIntervalRef.current = null;
     }
     
     // Clear queues and refs
@@ -676,6 +682,7 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
     reconnectAttempts.current = 0;
     
     setCallStatus("ended");
+    setCallDuration(0);
     console.log('[AudioCall] Cleanup complete');
   };
 
