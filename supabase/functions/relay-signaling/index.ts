@@ -56,24 +56,46 @@ Deno.serve(async (req) => {
     // Verify user is a member of the chat/room
     const { data: membership, error: memberError } = await supabase
       .from('chat_members')
-      .select('user_id')
+      .select('user_id, chat_id')
       .eq('chat_id', chatId || roomId)
       .eq('user_id', user.id)
-      .single()
+      .maybeSingle()
 
-    if (memberError || !membership) {
-      console.error('[relay-signaling] Membership verification failed:', {
+    console.log('[relay-signaling] Membership query result:', {
+      userId: user.id,
+      chatId: chatId || roomId,
+      membership,
+      error: memberError
+    })
+
+    if (memberError) {
+      console.error('[relay-signaling] Database error during membership check:', memberError)
+      return new Response(
+        JSON.stringify({ 
+          error: 'Database error checking chat membership',
+          details: memberError.message 
+        }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    if (!membership) {
+      console.error('[relay-signaling] User is not a member of this chat:', {
         userId: user.id,
         chatId: chatId || roomId,
-        error: memberError
+        messageType: message?.type
       })
       return new Response(
-        JSON.stringify({ error: 'Not authorized for this chat' }),
+        JSON.stringify({ 
+          error: 'Not authorized for this chat',
+          chatId: chatId || roomId,
+          userId: user.id
+        }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
     
-    console.log('[relay-signaling] Membership verified for user:', user.id)
+    console.log('[relay-signaling] Membership verified for user:', user.id, 'in chat:', chatId || roomId)
 
     // Create authenticated signaling message
     // The 'from' field is now trustworthy since it's set by the server
