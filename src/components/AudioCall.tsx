@@ -46,19 +46,28 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
   const { recordCall, updateCallStatus } = useCallHistory(currentUserId);
 
   const configuration: RTCConfiguration = {
-    iceServers: [
-      { urls: "stun:stun.l.google.com:19302" },
-      { urls: "stun:stun1.l.google.com:19302" },
-      { urls: "stun:stun2.l.google.com:19302" },
-      { urls: "stun:stun3.l.google.com:19302" },
-      { urls: "stun:stun4.l.google.com:19302" },
-      { urls: "stun:global.stun.twilio.com:3478" },
-    ],
-    iceTransportPolicy: 'all',
-    bundlePolicy: 'max-bundle',
-    rtcpMuxPolicy: 'require',
-    iceCandidatePoolSize: 10,
-  };
+      iceServers: [
+        { urls: "stun:stun.l.google.com:19302" },
+        { urls: "stun:stun1.l.google.com:19302" },
+        { urls: "stun:stun2.l.google.com:19302" },
+        { urls: "stun:stun3.l.google.com:19302" },
+        { urls: "stun:stun4.l.google.com:19302" },
+        { urls: "stun:global.stun.twilio.com:3478" },
+        // ✅ ДОБАВЬТЕ TURN сервер:
+        {
+          urls: [
+            'turn:web.goodok.org:3478',
+            'turns:web.goodok.org:5349'
+          ],
+          username: 'turnuser',
+          credential: 'turnpassword'
+        }
+      ],
+      iceTransportPolicy: 'all',
+      bundlePolicy: 'max-bundle',
+      rtcpMuxPolicy: 'require',
+      iceCandidatePoolSize: 10,
+    };
 
   useEffect(() => {
     if (!isOpen) return;
