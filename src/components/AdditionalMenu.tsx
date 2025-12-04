@@ -6,7 +6,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { Menu, Briefcase, FileText, Wallet, Fingerprint, Link, Plane, HelpCircle } from "lucide-react";
+import { Menu, Briefcase, Wallet, Fingerprint, Plane, HelpCircle, Users, Settings } from "lucide-react";
 
 const AdditionalMenu = () => {
   const navigate = useNavigate();
@@ -23,9 +23,9 @@ const AdditionalMenu = () => {
           <Briefcase className="w-4 h-4 mr-2" />
           Бизнес среда
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => navigate("/document-management")}>
-          <FileText className="w-4 h-4 mr-2" />
-          Документооборот
+        <DropdownMenuItem onClick={() => navigate("/social-network")}>
+          <Users className="w-4 h-4 mr-2" />
+          Социальная сеть
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => navigate("/wallet")}>
           <Wallet className="w-4 h-4 mr-2" />
@@ -35,13 +35,13 @@ const AdditionalMenu = () => {
           <Fingerprint className="w-4 h-4 mr-2" />
           Цифровое ID
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => navigate("/integrations")}>
-          <Link className="w-4 h-4 mr-2" />
-          Интеграции
-        </DropdownMenuItem>
         <DropdownMenuItem onClick={() => navigate("/travel")}>
           <Plane className="w-4 h-4 mr-2" />
           Путешествия
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => navigate("/profile")}>
+          <Settings className="w-4 h-4 mr-2" />
+          Настройки
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => navigate("/help")}>
           <HelpCircle className="w-4 h-4 mr-2" />

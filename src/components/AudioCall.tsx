@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import InviteToGroupCallDialog from "./InviteToGroupCallDialog";
 import { useCallHistory } from "@/hooks/useCallHistory";
+import { playBusyTone } from "@/utils/busyTone";
 
 interface AudioCallProps {
   isOpen: boolean;
@@ -156,6 +157,7 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
       .on("broadcast", { event: "call-busy" }, (payload: any) => {
         console.log('[AudioCall] Received busy signal:', payload);
         if (payload.payload?.userId === otherUserId) {
+          playBusyTone();
           toast.error("Абонент занят, попробуйте позже");
           handleEndCall();
         }
