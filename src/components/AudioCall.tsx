@@ -903,8 +903,19 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && handleEndCall()}>
-      <DialogContent className="max-w-md">
+    <Dialog open={isOpen} onOpenChange={() => {}}>
+      <DialogContent 
+        className="max-w-md"
+        onCloseClick={handleEndCall}
+        onInteractOutside={(e) => {
+          e.preventDefault();
+          setIsMinimized(true);
+        }}
+        onEscapeKeyDown={(e) => {
+          e.preventDefault();
+          setIsMinimized(true);
+        }}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between pr-8">
             <span>Голосовой звонок</span>

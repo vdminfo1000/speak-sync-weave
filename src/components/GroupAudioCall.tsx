@@ -472,8 +472,13 @@ const GroupAudioCall = ({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && handleEndCall()}>
-      <DialogContent className="max-w-2xl">
+    <Dialog open={isOpen} onOpenChange={() => {}}>
+      <DialogContent 
+        className="max-w-2xl"
+        onCloseClick={handleEndCall}
+        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between pr-8">
             <span>Групповой голосовой звонок</span>
