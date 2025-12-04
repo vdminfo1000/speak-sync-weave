@@ -144,13 +144,35 @@ const InviteToGroupCallDialog = ({
       const callerName = currentProfile?.full_name || currentProfile?.username || "Неизвестный";
       
       // Отправляем уведомление о входящем групповом звонке
-      const channel = supabase.channel(`global-call-notifications-${contact.id}`);
+      const channelName = `global-call-notifications-${contact.id}`;
+      console.log("[InviteToGroupCall] Subscribing to channel:", channelName);
       
-      await channel.subscribe((status) => {
-        console.log("[InviteToGroupCall] Channel subscription status:", status);
+      const channel = supabase.channel(channelName);
+      
+      // Дожидаемся полной подписки на канал
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error("Subscription timeout"));
+        }, 5000);
+        
+        channel.subscribe((status) => {
+          console.log("[InviteToGroupCall] Channel subscription status:", status);
+          if (status === "SUBSCRIBED") {
+            clearTimeout(timeout);
+            resolve();
+          } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+            clearTimeout(timeout);
+            reject(new Error(`Channel subscription failed: ${status}`));
+          }
+        });
       });
       
-      await channel.send({
+      console.log("[InviteToGroupCall] Channel subscribed, sending invitation...");
+      
+      // Небольшая задержка для синхронизации
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      const result = await channel.send({
         type: "broadcast",
         event: "incoming-call",
         payload: {
@@ -163,12 +185,12 @@ const InviteToGroupCallDialog = ({
         },
       });
       
-      console.log("[InviteToGroupCall] Invitation sent successfully");
+      console.log("[InviteToGroupCall] Invitation sent, result:", result);
       
       // Очищаем канал после отправки
       setTimeout(() => {
         supabase.removeChannel(channel);
-      }, 1000);
+      }, 2000);
       
       // Вызываем onInvite для подготовки к подключению
       onInvite(contact.id);
