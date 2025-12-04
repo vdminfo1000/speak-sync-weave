@@ -6,6 +6,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Phone, PhoneIncoming, PhoneOutgoing, PhoneMissed, Video } from "lucide-react";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
+import { toast } from "sonner";
 
 interface CallHistoryProps {
   isOpen: boolean;
@@ -160,10 +161,27 @@ const CallHistory = ({ isOpen, onClose, currentUserId, onStartCall }: CallHistor
       }
 
       const callType = call.call_type.includes("video") ? "video" : "audio";
+      
+      // Отправляем уведомление о входящем звонке получателю
+      const channel = supabase.channel(`global-call-notifications-${otherUserId}`);
+      await channel.subscribe();
+      await channel.send({
+        type: "broadcast",
+        event: "incoming-call",
+        payload: {
+          chatId: chatId,
+          callerId: currentUserId,
+          callType: callType,
+        },
+      });
+      await supabase.removeChannel(channel);
+      
+      toast.info("Звонок отправлен...");
       onStartCall({ chatId: chatId!, otherUserId, otherUserName: otherUserName!, callType });
       onClose();
     } catch (error) {
       console.error("Error initiating call:", error);
+      toast.error("Не удалось начать звонок");
     }
   };
 

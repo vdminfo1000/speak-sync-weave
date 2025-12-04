@@ -237,6 +237,18 @@ const Messenger = () => {
           toast.info("Звонок отклонен");
         }
       )
+      .on(
+        "broadcast",
+        { event: "call-ended" },
+        (payload: any) => {
+          console.log('[Messenger] Received call-ended signal:', payload);
+          // Закрываем уведомление о входящем звонке, если звонок был от того же звонящего
+          if (incomingCallRef.current?.callerId === payload.payload?.callerId) {
+            setIncomingCall(null);
+            toast.info("Звонок завершен");
+          }
+        }
+      )
       .subscribe((status) => {
         console.log('[Messenger] Call notifications channel status:', status);
       });
