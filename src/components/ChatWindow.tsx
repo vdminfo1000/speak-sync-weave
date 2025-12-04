@@ -95,10 +95,14 @@ interface ChatWindowProps {
   onStartCall?: (params: { chatId: string; otherUserId: string; otherUserName: string; callType: "audio" | "video" }) => void;
 }
 
+const MESSAGES_PER_PAGE = 30;
+
 const ChatWindow = ({ chatId, onBack, onStartCall }: ChatWindowProps) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [chatName, setChatName] = useState<string | null>(null);
   const [otherUserId, setOtherUserId] = useState<string | null>(null);
@@ -119,7 +123,10 @@ const ChatWindow = ({ chatId, onBack, onStartCall }: ChatWindowProps) => {
   const [showOwnerSettings, setShowOwnerSettings] = useState(false);
   const [chatType, setChatType] = useState<string>("private");
   const [currentUserRole, setCurrentUserRole] = useState<string>("member");
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const previousScrollHeightRef = useRef<number>(0);
 
   useEffect(() => {
     loadMessages();
@@ -319,8 +326,22 @@ const ChatWindow = ({ chatId, onBack, onStartCall }: ChatWindowProps) => {
   }, [otherUserId, currentUserId]);
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    if (isInitialLoad && messages.length > 0) {
+      scrollToBottom();
+      setIsInitialLoad(false);
+    }
+  }, [messages, isInitialLoad]);
+
+  // Handle scroll for loading more messages
+  const handleScroll = async () => {
+    const container = messagesContainerRef.current;
+    if (!container || loadingMore || !hasMore) return;
+    
+    // Load more when scrolled near the top
+    if (container.scrollTop < 100) {
+      await loadMoreMessages();
+    }
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -387,61 +408,72 @@ const ChatWindow = ({ chatId, onBack, onStartCall }: ChatWindowProps) => {
     }
   };
 
+  const enrichMessages = async (messagesData: any[]) => {
+    return Promise.all(
+      messagesData.map(async (message) => {
+        const { data: profile } = await (supabase as any)
+          .from("profiles")
+          .select("username, full_name, avatar_url")
+          .eq("id", message.sender_id)
+          .single();
+
+        // Get read and delivery status
+        const { data: reads } = await supabase
+          .from("message_reads")
+          .select("user_id")
+          .eq("message_id", message.id);
+
+        const { data: deliveries } = await supabase
+          .from("message_deliveries")
+          .select("user_id")
+          .eq("message_id", message.id);
+
+        // Get replied message if exists
+        let replied_message = null;
+        if (message.replied_to_message_id) {
+          const { data: repliedMsg } = await supabase
+            .from("messages")
+            .select("content, sender:sender_id(username)")
+            .eq("id", message.replied_to_message_id)
+            .single();
+          replied_message = repliedMsg;
+        }
+
+        return { 
+          ...message, 
+          sender: profile, 
+          read_by: reads || [],
+          delivered_to: deliveries || [],
+          replied_message 
+        };
+      })
+    );
+  };
+
   const loadMessages = async () => {
     try {
-      const { data: messagesData } = await (supabase as any)
+      // Load last N messages (ordered descending to get latest, then reverse)
+      const { data: messagesData, count } = await (supabase as any)
         .from("messages")
-        .select("*")
+        .select("*", { count: 'exact' })
         .eq("chat_id", chatId)
-        .order("created_at", { ascending: true });
+        .order("created_at", { ascending: false })
+        .limit(MESSAGES_PER_PAGE);
 
       if (!messagesData) return;
 
-      const messagesWithSenders = await Promise.all(
-        messagesData.map(async (message) => {
-          const { data: profile } = await (supabase as any)
-            .from("profiles")
-            .select("username, full_name, avatar_url")
-            .eq("id", message.sender_id)
-            .single();
+      // Reverse to show in correct order (oldest first)
+      const orderedMessages = messagesData.reverse();
+      
+      // Check if there are more messages to load
+      setHasMore(count ? count > MESSAGES_PER_PAGE : false);
 
-          // Get read and delivery status
-          const { data: reads } = await supabase
-            .from("message_reads")
-            .select("user_id")
-            .eq("message_id", message.id);
-
-          const { data: deliveries } = await supabase
-            .from("message_deliveries")
-            .select("user_id")
-            .eq("message_id", message.id);
-
-          // Get replied message if exists
-          let replied_message = null;
-          if (message.replied_to_message_id) {
-            const { data: repliedMsg } = await supabase
-              .from("messages")
-              .select("content, sender:sender_id(username)")
-              .eq("id", message.replied_to_message_id)
-              .single();
-            replied_message = repliedMsg;
-          }
-
-          return { 
-            ...message, 
-            sender: profile, 
-            read_by: reads || [],
-            delivered_to: deliveries || [],
-            replied_message 
-          };
-        })
-      );
-
+      const messagesWithSenders = await enrichMessages(orderedMessages);
       setMessages(messagesWithSenders);
       
       // Mark all unread messages as delivered and read
       if (currentUserId) {
-        const unreadMessages = messagesData.filter((m: any) => m.sender_id !== currentUserId);
+        const unreadMessages = orderedMessages.filter((m: any) => m.sender_id !== currentUserId);
         
         for (const msg of unreadMessages) {
           // Mark as delivered
@@ -461,6 +493,56 @@ const ChatWindow = ({ chatId, onBack, onStartCall }: ChatWindowProps) => {
       console.error("Error loading messages:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadMoreMessages = async () => {
+    if (loadingMore || !hasMore || messages.length === 0) return;
+    
+    setLoadingMore(true);
+    const container = messagesContainerRef.current;
+    if (container) {
+      previousScrollHeightRef.current = container.scrollHeight;
+    }
+
+    try {
+      const oldestMessage = messages[0];
+      
+      const { data: olderMessages } = await (supabase as any)
+        .from("messages")
+        .select("*")
+        .eq("chat_id", chatId)
+        .lt("created_at", oldestMessage.created_at)
+        .order("created_at", { ascending: false })
+        .limit(MESSAGES_PER_PAGE);
+
+      if (!olderMessages || olderMessages.length === 0) {
+        setHasMore(false);
+        return;
+      }
+
+      // Reverse to maintain correct order
+      const orderedOlderMessages = olderMessages.reverse();
+      
+      if (olderMessages.length < MESSAGES_PER_PAGE) {
+        setHasMore(false);
+      }
+
+      const enrichedMessages = await enrichMessages(orderedOlderMessages);
+      
+      setMessages(prev => [...enrichedMessages, ...prev]);
+
+      // Restore scroll position after prepending messages
+      requestAnimationFrame(() => {
+        if (container) {
+          const newScrollHeight = container.scrollHeight;
+          container.scrollTop = newScrollHeight - previousScrollHeightRef.current;
+        }
+      });
+    } catch (error) {
+      console.error("Error loading more messages:", error);
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -982,7 +1064,16 @@ const ChatWindow = ({ chatId, onBack, onStartCall }: ChatWindowProps) => {
       </div>
 
       <div className="flex flex-1 overflow-hidden">
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div 
+          ref={messagesContainerRef}
+          onScroll={handleScroll}
+          className="flex-1 overflow-y-auto p-4 space-y-4"
+        >
+          {loadingMore && (
+            <div className="flex justify-center py-2">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+            </div>
+          )}
           {messages.map((message) => {
           const isOwn = message.sender_id === currentUserId;
           const isDeleted = message.is_deleted;
