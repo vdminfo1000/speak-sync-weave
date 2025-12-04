@@ -25,6 +25,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import PublicChannelsList from "@/components/PublicChannelsList";
 import { useIsMobile } from "@/hooks/use-mobile";
 import AdditionalMenu from "@/components/AdditionalMenu";
+import { useRef } from "react";
 
 const Messenger = () => {
   const navigate = useNavigate();
@@ -61,6 +62,16 @@ const Messenger = () => {
     callType: "audio" | "video";
     participants: Array<{ userId: string; userName: string }>;
   } | null>(null);
+
+  // Refs для отслеживания актуального состояния звонков (для callback closures)
+  const incomingCallRef = useRef(incomingCall);
+  const activeCallRef = useRef(activeCall);
+  const activeGroupCallRef = useRef(activeGroupCall);
+  
+  // Синхронизируем refs с состоянием
+  incomingCallRef.current = incomingCall;
+  activeCallRef.current = activeCall;
+  activeGroupCallRef.current = activeGroupCall;
 
   // Отслеживаем статус пользователя
   useUserPresence(currentUserId || null);
@@ -166,6 +177,25 @@ const Messenger = () => {
         { event: "incoming-call" },
         async (payload: any) => {
           console.log("[Messenger] Global incoming call received:", payload);
+          
+          // Проверяем, есть ли уже активный звонок (используем refs для актуальных значений)
+          if (activeCallRef.current || activeGroupCallRef.current || incomingCallRef.current) {
+            console.log("[Messenger] Already in a call, ignoring incoming call");
+            
+            // Отправляем сигнал "занято" вызывающему
+            const busyChannel = supabase.channel(`call-notifications-${payload.payload.callerId}`);
+            await busyChannel.subscribe();
+            await busyChannel.send({
+              type: "broadcast",
+              event: "call-busy",
+              payload: { 
+                chatId: payload.payload.chatId,
+                userId: currentUserId 
+              },
+            });
+            await supabase.removeChannel(busyChannel);
+            return;
+          }
           
           // Get caller profile
           const { data: profile } = await supabase

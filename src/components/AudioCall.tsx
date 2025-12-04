@@ -151,6 +151,17 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
       timestamp: new Date().toISOString()
     });
 
+    // Подписываемся на уведомления о занятости собеседника
+    const busyChannel = supabase.channel(`call-notifications-${currentUserId}`)
+      .on("broadcast", { event: "call-busy" }, (payload: any) => {
+        console.log('[AudioCall] Received busy signal:', payload);
+        if (payload.payload?.userId === otherUserId) {
+          toast.error("Абонент занят, попробуйте позже");
+          handleEndCall();
+        }
+      })
+      .subscribe();
+
     // Записываем начало звонка
     if (isInitiator) {
       recordCall({
@@ -166,6 +177,7 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
     initializeCall();
 
     return () => {
+      supabase.removeChannel(busyChannel);
       cleanup();
     };
   }, [isOpen]);
@@ -187,6 +199,22 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
       }
     };
   }, [callStatus]);
+
+  // Восстанавливаем аудио при разворачивании окна
+  useEffect(() => {
+    console.log('[AudioCall] isMinimized changed:', isMinimized);
+    
+    const restoreTimeout = setTimeout(() => {
+      if (audioRef.current) {
+        console.log('[AudioCall] Ensuring audio is playing');
+        audioRef.current.play().catch(err => {
+          console.warn('[AudioCall] Failed to play audio:', err);
+        });
+      }
+    }, 50);
+    
+    return () => clearTimeout(restoreTimeout);
+  }, [isMinimized]);
 
   // Таймер для автоматического завершения неотвеченного исходящего вызова
   useEffect(() => {

@@ -172,6 +172,17 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
       timestamp: new Date().toISOString()
     });
 
+    // Подписываемся на уведомления о занятости собеседника
+    const busyChannel = supabase.channel(`call-notifications-${currentUserId}`)
+      .on("broadcast", { event: "call-busy" }, (payload: any) => {
+        console.log('[VideoCall] Received busy signal:', payload);
+        if (payload.payload?.userId === otherUserId) {
+          toast.error("Абонент занят, попробуйте позже");
+          handleEndCall();
+        }
+      })
+      .subscribe();
+
     // Записываем начало звонка
     if (isInitiator) {
       recordCall({
@@ -187,6 +198,7 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
     initializeCall();
 
     return () => {
+      supabase.removeChannel(busyChannel);
       cleanup();
     };
   }, [isOpen]);
@@ -208,6 +220,32 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
       }
     };
   }, [callStatus]);
+
+  // Восстанавливаем потоки при разворачивании окна
+  useEffect(() => {
+    console.log('[VideoCall] isMinimized changed:', isMinimized);
+    
+    // Восстанавливаем потоки для обоих режимов с небольшой задержкой
+    const restoreTimeout = setTimeout(() => {
+      if (localVideoRef.current && localStreamRef.current) {
+        console.log('[VideoCall] Restoring local stream to video element');
+        localVideoRef.current.srcObject = localStreamRef.current;
+        localVideoRef.current.play().catch(err => {
+          console.warn('[VideoCall] Failed to play local video:', err);
+        });
+      }
+      
+      if (remoteVideoRef.current && remoteStreamRef.current) {
+        console.log('[VideoCall] Restoring remote stream to video element');
+        remoteVideoRef.current.srcObject = remoteStreamRef.current;
+        remoteVideoRef.current.play().catch(err => {
+          console.warn('[VideoCall] Failed to play remote video:', err);
+        });
+      }
+    }, 50);
+    
+    return () => clearTimeout(restoreTimeout);
+  }, [isMinimized]);
 
   // Таймер для автоматического завершения неотвеченного исходящего вызова
   useEffect(() => {
@@ -1024,69 +1062,82 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
     console.log('[VideoCall] Cleanup complete');
   };
 
+  // Минимизированное представление - используем CSS visibility чтобы не пересоздавать DOM
   if (isMinimized) {
     return (
-      <div className="fixed bottom-4 right-4 z-50">
-        <div className="bg-card border border-border rounded-lg shadow-lg p-3 w-64">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-              <span className="text-sm font-medium">Видеозвонок</span>
+      <>
+        {/* Скрытые видео элементы для сохранения потоков */}
+        <div className="hidden">
+          <video
+            ref={remoteVideoRef}
+            autoPlay
+            playsInline
+            muted={false}
+          />
+        </div>
+        
+        <div className="fixed bottom-4 right-4 z-50">
+          <div className="bg-card border border-border rounded-lg shadow-lg p-3 w-64">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                <span className="text-sm font-medium">Видеозвонок</span>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsMinimized(false)}
+                className="h-6 w-6"
+              >
+                <Maximize2 className="w-4 h-4" />
+              </Button>
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setIsMinimized(false)}
-              className="h-6 w-6"
-            >
-              <Maximize2 className="w-4 h-4" />
-            </Button>
-          </div>
-          
-          <div className="relative aspect-video bg-secondary rounded overflow-hidden mb-2">
-            <video
-              ref={localVideoRef}
-              autoPlay
-              playsInline
-              muted={true}
-              className="w-full h-full object-cover"
-            />
-          </div>
-          
-          <div className="text-xs text-muted-foreground text-center mb-2">
-            {callStatus === "connected" && formatCallDuration(callDuration)}
-          </div>
-          
-          <div className="flex justify-center gap-2">
-            <Button
-              variant={isMuted ? "destructive" : "secondary"}
-              size="icon"
-              onClick={toggleMute}
-              className="rounded-full w-8 h-8"
-            >
-              {isMuted ? <MicOff className="w-3 h-3" /> : <Mic className="w-3 h-3" />}
-            </Button>
+            
+            <div className="relative aspect-video bg-secondary rounded overflow-hidden mb-2">
+              <video
+                ref={localVideoRef}
+                autoPlay
+                playsInline
+                muted={true}
+                className="w-full h-full object-cover"
+              />
+            </div>
+            
+            <div className="text-xs text-muted-foreground text-center mb-2">
+              {callStatus === "connected" && formatCallDuration(callDuration)}
+            </div>
+            
+            <div className="flex justify-center gap-2">
+              <Button
+                variant={isMuted ? "destructive" : "secondary"}
+                size="icon"
+                onClick={toggleMute}
+                className="rounded-full w-8 h-8"
+              >
+                {isMuted ? <MicOff className="w-3 h-3" /> : <Mic className="w-3 h-3" />}
+              </Button>
 
-            <Button
-              variant={isVideoOff ? "destructive" : "secondary"}
-              size="icon"
-              onClick={toggleVideo}
-              className="rounded-full w-8 h-8"
-            >
-              {isVideoOff ? <VideoOff className="w-3 h-3" /> : <VideoIcon className="w-3 h-3" />}
-            </Button>
+              <Button
+                variant={isVideoOff ? "destructive" : "secondary"}
+                size="icon"
+                onClick={toggleVideo}
+                className="rounded-full w-8 h-8"
+              >
+                {isVideoOff ? <VideoOff className="w-3 h-3" /> : <VideoIcon className="w-3 h-3" />}
+              </Button>
 
-            <Button
-              variant="destructive"
-              size="icon"
-              onClick={handleEndCall}
-              className="rounded-full w-8 h-8"
-            >
-              <PhoneOff className="w-3 h-3" />
-            </Button>
+              <Button
+                variant="destructive"
+                size="icon"
+                onClick={handleEndCall}
+                className="rounded-full w-8 h-8"
+              >
+                <PhoneOff className="w-3 h-3" />
+              </Button>
+            </div>
           </div>
         </div>
-      </div>
+      </>
     );
   }
 
