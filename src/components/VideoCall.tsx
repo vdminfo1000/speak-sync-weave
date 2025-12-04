@@ -42,6 +42,9 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
   const callTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const statsIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const originalStreamRef = useRef<MediaStream | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const remoteStreamRef = useRef<MediaStream | null>(null);
+  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const iceCandidatesQueue = useRef<RTCIceCandidateInit[]>([]);
   const isProcessingQueue = useRef(false);
   const reconnectAttempts = useRef(0);
@@ -188,6 +191,7 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
         console.log("Media access granted, got stream:", stream.id);
       }
       setLocalStream(stream);
+      localStreamRef.current = stream;
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
       }
@@ -195,6 +199,7 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
       // Создаем peer connection
       const pc = new RTCPeerConnection(configuration);
       setPeerConnection(pc);
+      peerConnectionRef.current = pc;
       originalStreamRef.current = stream;
       if (import.meta.env.DEV) {
         console.log("PeerConnection created");
@@ -253,7 +258,7 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
         }
         
         setRemoteStream(stream);
-        
+        remoteStreamRef.current = stream;
         if (remoteVideoRef.current) {
           console.log('[VideoCall] Attaching remote stream to video element');
           remoteVideoRef.current.srcObject = stream;
@@ -653,6 +658,7 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
           if (sender && videoTrack) {
             await sender.replaceTrack(videoTrack);
             setLocalStream(originalStreamRef.current);
+            localStreamRef.current = originalStreamRef.current;
             if (localVideoRef.current) {
               localVideoRef.current.srcObject = originalStreamRef.current;
             }
@@ -676,6 +682,7 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
         if (sender) {
           await sender.replaceTrack(screenTrack);
           setLocalStream(screenStream);
+          localStreamRef.current = screenStream;
           if (localVideoRef.current) {
             localVideoRef.current.srcObject = screenStream;
           }
@@ -811,26 +818,49 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
   const cleanup = () => {
     console.log('[VideoCall] Cleaning up call resources');
     
-    // Stop local tracks
-    if (localStream) {
-      localStream.getTracks().forEach((track) => {
+    // Stop local tracks using ref (more reliable than state)
+    const streamToClean = localStreamRef.current || localStream;
+    if (streamToClean) {
+      streamToClean.getTracks().forEach((track) => {
         track.stop();
-        console.log(`[VideoCall] Stopped local ${track.kind} track`);
+        console.log(`[VideoCall] Stopped local ${track.kind} track, enabled: ${track.enabled}, readyState: ${track.readyState}`);
       });
+      localStreamRef.current = null;
     }
     
-    // Stop remote tracks
-    if (remoteStream) {
-      remoteStream.getTracks().forEach((track) => {
+    // Stop original stream if exists (for screen sharing)
+    if (originalStreamRef.current) {
+      originalStreamRef.current.getTracks().forEach((track) => {
+        track.stop();
+        console.log(`[VideoCall] Stopped original ${track.kind} track`);
+      });
+      originalStreamRef.current = null;
+    }
+    
+    // Stop remote tracks using ref
+    const remoteToClean = remoteStreamRef.current || remoteStream;
+    if (remoteToClean) {
+      remoteToClean.getTracks().forEach((track) => {
         track.stop();
         console.log(`[VideoCall] Stopped remote ${track.kind} track`);
       });
+      remoteStreamRef.current = null;
     }
     
-    // Close peer connection
-    if (peerConnection) {
-      peerConnection.close();
+    // Clear video elements srcObject
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = null;
+    }
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.srcObject = null;
+    }
+    
+    // Close peer connection using ref
+    const pcToClose = peerConnectionRef.current || peerConnection;
+    if (pcToClose) {
+      pcToClose.close();
       console.log('[VideoCall] Peer connection closed');
+      peerConnectionRef.current = null;
     }
     
     // Remove Supabase channel
