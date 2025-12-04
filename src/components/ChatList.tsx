@@ -5,7 +5,6 @@ import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow } from "date-fns";
 import { ru } from "date-fns/locale";
 import { MessageCircle } from "lucide-react";
-import { isUserOnline } from "@/utils/userStatus";
 
 interface Chat {
   id: string;
@@ -243,9 +242,6 @@ const ChatList = ({ onSelectChat, selectedChatId }: ChatListProps) => {
         const displayName = chat.is_group
           ? chat.name
           : (chat.other_user?.full_name || chat.other_user?.username || "Неизвестный");
-        const isOnline = chat.other_user 
-          ? isUserOnline(chat.other_user.last_seen, chat.other_user.status)
-          : false;
 
         return (
           <button
@@ -295,17 +291,12 @@ const ChatList = ({ onSelectChat, selectedChatId }: ChatListProps) => {
               selectedChatId === chat.id ? "bg-secondary" : ""
             }`}
           >
-            <div className="relative">
-              <Avatar className="w-12 h-12">
-                <AvatarImage src={chat.avatar_url || chat.other_user?.avatar_url || undefined} />
-                <AvatarFallback className="bg-primary/10 text-primary">
-                  {displayName?.charAt(0).toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
-              {!chat.is_group && isOnline && (
-                <div className="absolute bottom-0 right-0 w-3 h-3 bg-accent rounded-full border-2 border-background" />
-              )}
-            </div>
+            <Avatar className="w-12 h-12">
+              <AvatarImage src={chat.avatar_url || chat.other_user?.avatar_url || undefined} />
+              <AvatarFallback className="bg-primary/10 text-primary">
+                {displayName?.charAt(0).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
 
             <div className="flex-1 min-w-0 text-left">
               <div className="flex items-center justify-between mb-1">
