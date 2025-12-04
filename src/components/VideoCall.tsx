@@ -425,6 +425,26 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
           offer: offer,
         });
         console.log('[VideoCall] Offer sent immediately to peer');
+        
+        // Повторяем offer каждые 3 секунды пока не получим answer или не подключимся
+        const offerRetryInterval = setInterval(async () => {
+          if (pc.signalingState === 'have-local-offer' && callStatus === 'connecting') {
+            console.log('[VideoCall] Retrying offer (no answer received yet)');
+            await sendSignalingMessage({
+              type: "offer",
+              offer: pc.localDescription,
+            });
+          } else {
+            clearInterval(offerRetryInterval);
+          }
+        }, 3000);
+        
+        // Очищаем интервал при закрытии
+        setTimeout(() => clearInterval(offerRetryInterval), 30000);
+      } else {
+        // Получатель отправляет "ready" чтобы инициатор знал что можно отправлять offer
+        console.log('[VideoCall] Sending ready signal as receiver');
+        await sendSignalingMessage({ type: "ready" });
       }
 
     } catch (error) {
@@ -510,8 +530,25 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
           }
 
           try {
-            if (message.type === "offer") {
+            if (message.type === "ready") {
+              // Получатель готов, отправляем offer повторно
+              console.log('[VideoCall] 📨 Receiver is ready, re-sending offer');
+              if (isInitiator && pc.localDescription) {
+                await sendSignalingMessage({
+                  type: "offer",
+                  offer: pc.localDescription,
+                });
+                console.log('[VideoCall] ✓ Offer re-sent to ready receiver');
+              }
+            } else if (message.type === "offer") {
               console.log('[VideoCall] 📨 Received offer from peer at', new Date().toISOString());
+              
+              // Проверяем состояние - если уже есть remote description, пропускаем
+              if (pc.signalingState === 'stable' && pc.remoteDescription) {
+                console.log('[VideoCall] ⚠ Already have remote description, ignoring duplicate offer');
+                return;
+              }
+              
               await pc.setRemoteDescription(new RTCSessionDescription(message.offer));
               console.log('[VideoCall] ✓ Remote description set (offer)');
               
