@@ -158,13 +158,14 @@ const Messenger = () => {
       .subscribe();
 
     // Global call notifications listener
+    console.log('[Messenger] Setting up global call notifications channel for:', currentUserId);
     const callChannel = supabase
       .channel(`global-call-notifications-${currentUserId}`)
       .on(
         "broadcast",
         { event: "incoming-call" },
         async (payload: any) => {
-          console.log("Global incoming call:", payload);
+          console.log("[Messenger] Global incoming call received:", payload);
           
           // Get caller profile
           const { data: profile } = await supabase
@@ -174,6 +175,15 @@ const Messenger = () => {
             .single();
 
           const callerName = profile?.full_name || profile?.username || "Unknown";
+          
+          console.log("[Messenger] Setting incoming call state:", {
+            chatId: payload.payload.chatId,
+            callerName,
+            callerId: payload.payload.callerId,
+            callType: payload.payload.callType,
+            isGroupCall: payload.payload.isGroupCall,
+            roomId: payload.payload.roomId,
+          });
           
           setIncomingCall({
             chatId: payload.payload.chatId,
@@ -193,7 +203,9 @@ const Messenger = () => {
           toast.info("Звонок отклонен");
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('[Messenger] Call notifications channel status:', status);
+      });
 
     return () => {
       supabase.removeChannel(requestsChannel);
