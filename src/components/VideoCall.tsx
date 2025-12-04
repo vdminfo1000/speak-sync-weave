@@ -1159,7 +1159,7 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
         isOpen={showInviteDialog}
         onClose={() => setShowInviteDialog(false)}
         currentUserId={currentUserId}
-        chatId={chatId}
+        roomId={chatId}
         callType="video"
         onInvite={handleInviteToGroup}
       />
