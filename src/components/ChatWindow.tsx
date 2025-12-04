@@ -95,7 +95,7 @@ interface ChatWindowProps {
   onStartCall?: (params: { chatId: string; otherUserId: string; otherUserName: string; callType: "audio" | "video" }) => void;
 }
 
-const MESSAGES_PER_PAGE = 30;
+const MESSAGES_PER_PAGE = 10;
 
 const ChatWindow = ({ chatId, onBack, onStartCall }: ChatWindowProps) => {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -326,11 +326,12 @@ const ChatWindow = ({ chatId, onBack, onStartCall }: ChatWindowProps) => {
   }, [otherUserId, currentUserId]);
 
   useEffect(() => {
-    if (isInitialLoad && messages.length > 0) {
-      scrollToBottom();
+    if (isInitialLoad && messages.length > 0 && !loading) {
+      // Use instant scroll on initial load to prevent visual scrolling effect
+      scrollToBottom(true);
       setIsInitialLoad(false);
     }
-  }, [messages, isInitialLoad]);
+  }, [messages, isInitialLoad, loading]);
 
   // Handle scroll for loading more messages
   const handleScroll = async () => {
@@ -343,8 +344,8 @@ const ChatWindow = ({ chatId, onBack, onStartCall }: ChatWindowProps) => {
     }
   };
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  const scrollToBottom = (instant = false) => {
+    messagesEndRef.current?.scrollIntoView({ behavior: instant ? "instant" : "smooth" });
   };
 
   const loadChatInfo = async () => {
