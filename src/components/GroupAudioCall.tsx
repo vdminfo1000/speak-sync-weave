@@ -67,6 +67,33 @@ const GroupAudioCall = ({
       iceCandidatePoolSize: 10,
     };
 
+  // Обработчик для очистки при закрытии/навигации
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      console.log('[GroupAudioCall] Page unloading, cleaning up...');
+      if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+      }
+      participants.forEach(p => {
+        if (p.stream) p.stream.getTracks().forEach(track => track.stop());
+        if (p.peerConnection) p.peerConnection.close();
+      });
+    };
+
+    const handlePageHide = () => {
+      console.log('[GroupAudioCall] Page hide event');
+      handleBeforeUnload();
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('pagehide', handlePageHide);
+    
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('pagehide', handlePageHide);
+    };
+  }, [localStream, participants]);
+
   useEffect(() => {
     if (!isOpen) return;
 

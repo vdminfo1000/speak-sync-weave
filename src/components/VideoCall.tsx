@@ -45,6 +45,7 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
   const localStreamRef = useRef<MediaStream | null>(null);
   const remoteStreamRef = useRef<MediaStream | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const screenStreamRef = useRef<MediaStream | null>(null);
   const iceCandidatesQueue = useRef<RTCIceCandidateInit[]>([]);
   const isProcessingQueue = useRef(false);
   const reconnectAttempts = useRef(0);
@@ -126,10 +127,37 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
       }
     };
 
+    // Обработчик для закрытия страницы / навигации
+    const handleBeforeUnload = () => {
+      console.log('[VideoCall] Page unloading, cleaning up...');
+      // Останавливаем все стримы синхронно
+      if (screenStreamRef.current) {
+        screenStreamRef.current.getTracks().forEach(track => track.stop());
+      }
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach(track => track.stop());
+      }
+      if (originalStreamRef.current) {
+        originalStreamRef.current.getTracks().forEach(track => track.stop());
+      }
+      if (peerConnectionRef.current) {
+        peerConnectionRef.current.close();
+      }
+    };
+
+    const handlePageHide = () => {
+      console.log('[VideoCall] Page hide event, cleaning up...');
+      handleBeforeUnload();
+    };
+
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('pagehide', handlePageHide);
     
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('pagehide', handlePageHide);
     };
   }, []);
 
@@ -707,6 +735,16 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
 
     try {
       if (isScreenSharing) {
+        // Останавливаем треки демонстрации экрана
+        if (screenStreamRef.current) {
+          console.log('[VideoCall] Stopping screen share tracks');
+          screenStreamRef.current.getTracks().forEach(track => {
+            track.stop();
+            console.log(`[VideoCall] Stopped screen track: ${track.kind}, readyState: ${track.readyState}`);
+          });
+          screenStreamRef.current = null;
+        }
+        
         // Возвращаемся к камере
         if (originalStreamRef.current) {
           const videoTrack = originalStreamRef.current.getVideoTracks()[0];
@@ -733,6 +771,9 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
           }
         });
 
+        // Сохраняем ссылку на стрим демонстрации экрана
+        screenStreamRef.current = screenStream;
+
         const screenTrack = screenStream.getVideoTracks()[0];
         const sender = peerConnection.getSenders().find(s => s.track?.kind === 'video');
 
@@ -744,9 +785,29 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
             localVideoRef.current.srcObject = screenStream;
           }
 
-          // Обработка окончания демонстрации экрана
+          // Обработка окончания демонстрации экрана (когда пользователь нажимает "Прекратить демонстрацию" в браузере)
           screenTrack.onended = () => {
-            toggleScreenShare();
+            console.log('[VideoCall] Screen share ended by user');
+            // Очищаем ссылку, чтобы избежать повторного вызова stop
+            screenStreamRef.current = null;
+            setIsScreenSharing(false);
+            
+            // Возвращаемся к камере
+            if (originalStreamRef.current && peerConnectionRef.current) {
+              const videoTrack = originalStreamRef.current.getVideoTracks()[0];
+              const sender = peerConnectionRef.current.getSenders().find(s => s.track?.kind === 'video');
+              
+              if (sender && videoTrack) {
+                sender.replaceTrack(videoTrack).then(() => {
+                  setLocalStream(originalStreamRef.current);
+                  localStreamRef.current = originalStreamRef.current;
+                  if (localVideoRef.current) {
+                    localVideoRef.current.srcObject = originalStreamRef.current;
+                  }
+                  toast.success("Демонстрация экрана остановлена");
+                });
+              }
+            }
           };
         }
         
@@ -874,6 +935,16 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
 
   const cleanup = () => {
     console.log('[VideoCall] Cleaning up call resources');
+    
+    // Stop screen share stream first
+    if (screenStreamRef.current) {
+      screenStreamRef.current.getTracks().forEach((track) => {
+        track.stop();
+        console.log(`[VideoCall] Stopped screen share ${track.kind} track`);
+      });
+      screenStreamRef.current = null;
+    }
+    setIsScreenSharing(false);
     
     // Stop local tracks using ref (more reliable than state)
     const streamToClean = localStreamRef.current || localStream;

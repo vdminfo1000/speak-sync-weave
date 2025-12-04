@@ -113,10 +113,30 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
       }
     };
 
+    // Обработчик для закрытия страницы / навигации
+    const handleBeforeUnload = () => {
+      console.log('[AudioCall] Page unloading, cleaning up...');
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach(track => track.stop());
+      }
+      if (peerConnectionRef.current) {
+        peerConnectionRef.current.close();
+      }
+    };
+
+    const handlePageHide = () => {
+      console.log('[AudioCall] Page hide event, cleaning up...');
+      handleBeforeUnload();
+    };
+
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('pagehide', handlePageHide);
     
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('pagehide', handlePageHide);
     };
   }, []);
 
