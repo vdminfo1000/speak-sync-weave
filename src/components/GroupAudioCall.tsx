@@ -42,6 +42,17 @@ const GroupAudioCall = ({
   const audioRefs = useRef<Map<string, HTMLAudioElement>>(new Map());
   const channelRef = useRef<any>(null);
   const callTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const participantsRef = useRef<Participant[]>(initialParticipants.map(p => ({ userId: p.userId, userName: p.userName })));
+
+  // Синхронизируем refs с state
+  useEffect(() => {
+    localStreamRef.current = localStream;
+  }, [localStream]);
+
+  useEffect(() => {
+    participantsRef.current = participants;
+  }, [participants]);
 
   const configuration: RTCConfiguration = {
       iceServers: [
@@ -297,70 +308,72 @@ const GroupAudioCall = ({
           if (payload.to && payload.to !== currentUserId) return;
           
           const { message, from } = payload;
-          if (import.meta.env.DEV) {
-            console.log("Received authenticated signaling message:", message.type, "from:", from);
-          }
+          console.log("[GroupAudioCall] Received signaling message:", message.type, "from:", from);
 
           try {
+            // Используем refs для актуальных значений
+            const currentParticipants = participantsRef.current;
+            const currentStream = localStreamRef.current;
+            
             if (message.type === "user-joined") {
-              if (from !== currentUserId && !participants.find(p => p.userId === from)) {
-                if (import.meta.env.DEV) {
-                  console.log("New user joined:", from);
-                }
+              if (from !== currentUserId && !currentParticipants.find(p => p.userId === from)) {
+                console.log("[GroupAudioCall] New user joined:", from);
                 setParticipants(prev => [...prev, { userId: from, userName: "Участник" }]);
                 
-                if (localStream) {
-                  await createPeerConnection(from, true, localStream);
+                if (currentStream) {
+                  console.log("[GroupAudioCall] Creating peer connection to new user:", from);
+                  await createPeerConnection(from, true, currentStream);
+                } else {
+                  console.error("[GroupAudioCall] No local stream available for peer connection");
                 }
               }
             } else if (message.type === "offer") {
-              if (import.meta.env.DEV) {
-                console.log("Processing offer from", from);
-              }
-              const participant = participants.find(p => p.userId === from);
+              console.log("[GroupAudioCall] Processing offer from", from);
+              const participant = currentParticipants.find(p => p.userId === from);
               let pc = participant?.peerConnection;
               
-              if (!pc && localStream) {
-                pc = await createPeerConnection(from, false, localStream);
+              if (!pc && currentStream) {
+                console.log("[GroupAudioCall] Creating new peer connection for offer");
+                pc = await createPeerConnection(from, false, currentStream);
               }
               
               if (pc) {
                 await pc.setRemoteDescription(new RTCSessionDescription(message.offer));
                 const answer = await pc.createAnswer();
                 await pc.setLocalDescription(answer);
+                console.log("[GroupAudioCall] Sending answer to", from);
                 await sendSignalingMessage({
                   type: "answer",
                   answer: answer,
                 }, from);
               }
             } else if (message.type === "answer") {
-              if (import.meta.env.DEV) {
-                console.log("Processing answer from", from);
-              }
-              const participant = participants.find(p => p.userId === from);
+              console.log("[GroupAudioCall] Processing answer from", from);
+              const participant = currentParticipants.find(p => p.userId === from);
               const pc = participant?.peerConnection;
               
               if (pc && pc.signalingState === "have-local-offer") {
                 await pc.setRemoteDescription(new RTCSessionDescription(message.answer));
+                console.log("[GroupAudioCall] Answer processed successfully");
+              } else {
+                console.warn("[GroupAudioCall] Cannot process answer, state:", pc?.signalingState);
               }
             } else if (message.type === "ice-candidate") {
-              if (import.meta.env.DEV) {
-                console.log("Adding ICE candidate from", from);
-              }
-              const participant = participants.find(p => p.userId === from);
+              console.log("[GroupAudioCall] Adding ICE candidate from", from);
+              const participant = currentParticipants.find(p => p.userId === from);
               const pc = participant?.peerConnection;
               
               if (pc && pc.remoteDescription) {
                 await pc.addIceCandidate(new RTCIceCandidate(message.candidate));
+              } else {
+                console.warn("[GroupAudioCall] Cannot add ICE candidate, no remote description yet");
               }
             } else if (message.type === "user-left") {
-              if (import.meta.env.DEV) {
-                console.log("User left:", from);
-              }
+              console.log("[GroupAudioCall] User left:", from);
               handleParticipantLeft(from);
             }
           } catch (error) {
-            console.error("Error processing signaling message:", error);
+            console.error("[GroupAudioCall] Error processing signaling message:", error);
           }
         })
         .subscribe((status) => {
