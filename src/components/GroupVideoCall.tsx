@@ -522,8 +522,13 @@ const GroupVideoCall = ({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && handleEndCall()}>
-      <DialogContent className="max-w-6xl h-[90vh]">
+    <Dialog open={isOpen} onOpenChange={() => {}}>
+      <DialogContent 
+        className="max-w-6xl h-[90vh]"
+        onCloseClick={handleEndCall}
+        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between pr-8">
             <span>Групповой видеозвонок</span>

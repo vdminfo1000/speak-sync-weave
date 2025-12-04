@@ -1091,8 +1091,19 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && handleEndCall()}>
-      <DialogContent className="max-w-4xl">
+    <Dialog open={isOpen} onOpenChange={() => {}}>
+      <DialogContent 
+        className="max-w-4xl"
+        onCloseClick={handleEndCall}
+        onInteractOutside={(e) => {
+          e.preventDefault();
+          setIsMinimized(true);
+        }}
+        onEscapeKeyDown={(e) => {
+          e.preventDefault();
+          setIsMinimized(true);
+        }}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between pr-8">
             <span>Видеозвонок</span>
