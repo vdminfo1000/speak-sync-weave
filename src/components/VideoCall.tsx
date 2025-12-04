@@ -173,13 +173,21 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
       timestamp: new Date().toISOString()
     });
 
-    // Подписываемся на уведомления о занятости собеседника
+    // Подписываемся на уведомления о занятости и отклонении звонка
     const busyChannel = supabase.channel(`call-notifications-${currentUserId}`)
       .on("broadcast", { event: "call-busy" }, (payload: any) => {
         console.log('[VideoCall] Received busy signal:', payload);
         if (payload.payload?.userId === otherUserId) {
           playBusyTone();
           toast.error("Абонент занят, попробуйте позже");
+          handleEndCall();
+        }
+      })
+      .on("broadcast", { event: "call-declined" }, (payload: any) => {
+        console.log('[VideoCall] Received call-declined signal:', payload);
+        if (payload.payload?.chatId === chatId) {
+          playBusyTone();
+          toast.info("Звонок отклонен");
           handleEndCall();
         }
       })
