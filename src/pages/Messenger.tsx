@@ -499,16 +499,7 @@ const Messenger = () => {
             </div>
 
             {/* Text buttons */}
-            <Button 
-              variant="outline" 
-              className="w-full" 
-              onClick={() => navigate("/social-network")}
-            >
-              <MessageCircle className="w-4 h-4 mr-2" />
-              Социальная сеть
-            </Button>
-
-            <Button 
+            <Button
               variant="outline" 
               className="w-full relative" 
               onClick={() => {
