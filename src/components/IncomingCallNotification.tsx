@@ -1,4 +1,4 @@
-import { Phone, PhoneOff } from "lucide-react";
+import { Phone, PhoneOff, Video, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -9,11 +9,21 @@ interface IncomingCallNotificationProps {
   callerName: string;
   callerId: string;
   currentUserId: string;
+  callType?: "audio" | "video";
+  isGroupCall?: boolean;
   onAccept: () => void;
   onDecline: () => void;
 }
 
-const IncomingCallNotification = ({ callerName, callerId, currentUserId, onAccept, onDecline }: IncomingCallNotificationProps) => {
+const IncomingCallNotification = ({ 
+  callerName, 
+  callerId, 
+  currentUserId, 
+  callType = "video",
+  isGroupCall = false,
+  onAccept, 
+  onDecline 
+}: IncomingCallNotificationProps) => {
   const { playRingtone, stopRingtone } = useRingtone(currentUserId, callerId);
 
   useEffect(() => {
@@ -33,6 +43,18 @@ const IncomingCallNotification = ({ callerName, callerId, currentUserId, onAccep
     stopRingtone();
     onDecline();
   };
+
+  const getCallTypeText = () => {
+    if (isGroupCall) {
+      return callType === "video" 
+        ? "Приглашение в групповой видеозвонок..." 
+        : "Приглашение в групповой аудиозвонок...";
+    }
+    return callType === "video" 
+      ? "Входящий видеозвонок..." 
+      : "Входящий аудиозвонок...";
+  };
+
   return (
     <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center animate-in fade-in">
       <Card className="w-full max-w-md mx-4 border-2 border-primary shadow-2xl">
@@ -41,17 +63,21 @@ const IncomingCallNotification = ({ callerName, callerId, currentUserId, onAccep
             <div className="relative">
               <Avatar className="w-24 h-24 ring-4 ring-primary/20">
                 <AvatarFallback className="bg-primary/10 text-primary text-3xl">
-                  {callerName.charAt(0).toUpperCase()}
+                  {isGroupCall ? <Users className="w-10 h-10" /> : callerName.charAt(0).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
               <div className="absolute -bottom-1 -right-1 w-8 h-8 bg-primary rounded-full flex items-center justify-center animate-pulse">
-                <Phone className="w-4 h-4 text-primary-foreground" />
+                {callType === "video" ? (
+                  <Video className="w-4 h-4 text-primary-foreground" />
+                ) : (
+                  <Phone className="w-4 h-4 text-primary-foreground" />
+                )}
               </div>
             </div>
 
             <div className="text-center space-y-2">
               <h3 className="text-2xl font-semibold">{callerName}</h3>
-              <p className="text-muted-foreground">Входящий видеозвонок...</p>
+              <p className="text-muted-foreground">{getCallTypeText()}</p>
             </div>
           </div>
 

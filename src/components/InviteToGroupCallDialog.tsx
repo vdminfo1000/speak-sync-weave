@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Search, UserPlus } from "lucide-react";
+import { Search, UserPlus, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -19,7 +19,7 @@ interface InviteToGroupCallDialogProps {
   isOpen: boolean;
   onClose: () => void;
   currentUserId: string;
-  chatId: string;
+  roomId: string;
   callType: "audio" | "video";
   onInvite: (contactId: string) => void;
 }
@@ -28,7 +28,7 @@ const InviteToGroupCallDialog = ({
   isOpen,
   onClose,
   currentUserId,
-  chatId,
+  roomId,
   callType,
   onInvite,
 }: InviteToGroupCallDialogProps) => {
@@ -36,6 +36,7 @@ const InviteToGroupCallDialog = ({
   const [filteredContacts, setFilteredContacts] = useState<Profile[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(false);
+  const [invitingId, setInvitingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -127,14 +128,58 @@ const InviteToGroupCallDialog = ({
     }
   };
 
-  const handleInvite = async (contactId: string) => {
+  const handleInvite = async (contact: Profile) => {
+    setInvitingId(contact.id);
+    
     try {
-      onInvite(contactId);
-      toast.success("Приглашение отправлено");
+      console.log("[InviteToGroupCall] Sending group call invitation to:", contact.id);
+      
+      // Получаем имя текущего пользователя
+      const { data: currentProfile } = await supabase
+        .from("profiles")
+        .select("full_name, username")
+        .eq("id", currentUserId)
+        .single();
+      
+      const callerName = currentProfile?.full_name || currentProfile?.username || "Неизвестный";
+      
+      // Отправляем уведомление о входящем групповом звонке
+      const channel = supabase.channel(`global-call-notifications-${contact.id}`);
+      
+      await channel.subscribe((status) => {
+        console.log("[InviteToGroupCall] Channel subscription status:", status);
+      });
+      
+      await channel.send({
+        type: "broadcast",
+        event: "incoming-call",
+        payload: {
+          callerId: currentUserId,
+          callerName,
+          chatId: roomId,
+          callType,
+          isGroupCall: true,
+          roomId,
+        },
+      });
+      
+      console.log("[InviteToGroupCall] Invitation sent successfully");
+      
+      // Очищаем канал после отправки
+      setTimeout(() => {
+        supabase.removeChannel(channel);
+      }, 1000);
+      
+      // Вызываем onInvite для подготовки к подключению
+      onInvite(contact.id);
+      
+      toast.success(`Приглашение отправлено ${contact.full_name || contact.username}`);
       onClose();
     } catch (error) {
-      console.error("Error inviting to group call:", error);
+      console.error("[InviteToGroupCall] Error sending invitation:", error);
       toast.error("Не удалось отправить приглашение");
+    } finally {
+      setInvitingId(null);
     }
   };
 
@@ -195,9 +240,14 @@ const InviteToGroupCallDialog = ({
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => handleInvite(contact.id)}
+                      onClick={() => handleInvite(contact)}
+                      disabled={invitingId === contact.id}
                     >
-                      <UserPlus className="h-4 w-4" />
+                      {invitingId === contact.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <UserPlus className="h-4 w-4" />
+                      )}
                     </Button>
                   </div>
                 ))}

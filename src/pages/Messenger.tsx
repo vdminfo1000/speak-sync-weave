@@ -18,6 +18,8 @@ import { getUserFriendlyError } from "@/lib/errorHandler";
 import IncomingCallNotification from "@/components/IncomingCallNotification";
 import VideoCall from "@/components/VideoCall";
 import AudioCall from "@/components/AudioCall";
+import GroupVideoCall from "@/components/GroupVideoCall";
+import GroupAudioCall from "@/components/GroupAudioCall";
 import CallHistory from "@/components/CallHistory";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import PublicChannelsList from "@/components/PublicChannelsList";
@@ -44,6 +46,8 @@ const Messenger = () => {
     callerName: string;
     callerId: string;
     callType: "audio" | "video";
+    isGroupCall?: boolean;
+    roomId?: string;
   } | null>(null);
   const [activeCall, setActiveCall] = useState<{
     chatId: string;
@@ -51,6 +55,11 @@ const Messenger = () => {
     otherUserName: string;
     callType: "audio" | "video";
     isInitiator: boolean;
+  } | null>(null);
+  const [activeGroupCall, setActiveGroupCall] = useState<{
+    roomId: string;
+    callType: "audio" | "video";
+    participants: Array<{ userId: string; userName: string }>;
   } | null>(null);
 
   // Отслеживаем статус пользователя
@@ -171,6 +180,8 @@ const Messenger = () => {
             callerName,
             callerId: payload.payload.callerId,
             callType: payload.payload.callType,
+            isGroupCall: payload.payload.isGroupCall || false,
+            roomId: payload.payload.roomId,
           });
         }
       )
@@ -195,7 +206,32 @@ const Messenger = () => {
     
     console.log('[Messenger] Accepting call:', incomingCall);
     
-    // Verify chat membership before accepting
+    // Для групповых звонков
+    if (incomingCall.isGroupCall && incomingCall.roomId) {
+      console.log('[Messenger] Accepting group call invitation');
+      
+      // Получаем имя текущего пользователя
+      const { data: currentProfile } = await supabase
+        .from("profiles")
+        .select("full_name, username")
+        .eq("id", currentUserId)
+        .single();
+      
+      const currentUserName = currentProfile?.full_name || currentProfile?.username || "Вы";
+      
+      setActiveGroupCall({
+        roomId: incomingCall.roomId,
+        callType: incomingCall.callType,
+        participants: [
+          { userId: currentUserId, userName: currentUserName },
+          { userId: incomingCall.callerId, userName: incomingCall.callerName },
+        ],
+      });
+      setIncomingCall(null);
+      return;
+    }
+    
+    // Verify chat membership before accepting regular call
     try {
       const { data: membership, error } = await supabase
         .from('chat_members')
@@ -501,6 +537,8 @@ const Messenger = () => {
           callerName={incomingCall.callerName}
           callerId={incomingCall.callerId}
           currentUserId={currentUserId}
+          callType={incomingCall.callType}
+          isGroupCall={incomingCall.isGroupCall}
           onAccept={handleAcceptCall}
           onDecline={handleDeclineCall}
         />
@@ -554,6 +592,27 @@ const Messenger = () => {
           otherUserId={activeCall.otherUserId}
           otherUserName={activeCall.otherUserName}
           isInitiator={activeCall.isInitiator}
+        />
+      )}
+
+      {/* Group call dialogs */}
+      {activeGroupCall && activeGroupCall.callType === "video" && (
+        <GroupVideoCall
+          isOpen={true}
+          onClose={() => setActiveGroupCall(null)}
+          roomId={activeGroupCall.roomId}
+          currentUserId={currentUserId}
+          initialParticipants={activeGroupCall.participants}
+        />
+      )}
+      
+      {activeGroupCall && activeGroupCall.callType === "audio" && (
+        <GroupAudioCall
+          isOpen={true}
+          onClose={() => setActiveGroupCall(null)}
+          roomId={activeGroupCall.roomId}
+          currentUserId={currentUserId}
+          initialParticipants={activeGroupCall.participants}
         />
       )}
     </div>

@@ -963,7 +963,7 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
         isOpen={showInviteDialog}
         onClose={() => setShowInviteDialog(false)}
         currentUserId={currentUserId}
-        chatId={chatId}
+        roomId={chatId}
         callType="audio"
         onInvite={handleInviteToGroup}
       />
