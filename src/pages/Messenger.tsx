@@ -12,6 +12,7 @@ import CreateGroupDialog from "@/components/CreateGroupDialog";
 import { useUserPresence } from "@/hooks/useUserPresence";
 import { useCallHistory } from "@/hooks/useCallHistory";
 import { useChannelUnreadCount } from "@/hooks/useChannelUnreadCount";
+import { useMissedCallsCount } from "@/hooks/useMissedCallsCount";
 import { LogOut, Plus, Shield, MessageCircle, Bell, User, Phone, Users, Radio } from "lucide-react";
 import { toast } from "sonner";
 import { getUserFriendlyError } from "@/lib/errorHandler";
@@ -82,6 +83,9 @@ const Messenger = () => {
   // Отслеживаем непрочитанные каналы
   const { unreadCount: channelUnreadCount, resetUnreadCount: resetChannelUnread } = 
     useChannelUnreadCount(currentUserId || null);
+
+  // Отслеживаем пропущенные звонки
+  const { missedCallsCount, resetMissedCallsCount } = useMissedCallsCount(currentUserId || null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -530,11 +534,22 @@ const Messenger = () => {
           <div className="p-4 border-t border-border">
             <Button 
               variant="outline" 
-              className="w-full" 
-              onClick={() => setIsCallHistoryOpen(true)}
+              className="w-full relative" 
+              onClick={() => {
+                setIsCallHistoryOpen(true);
+                resetMissedCallsCount();
+              }}
             >
               <Phone className="w-4 h-4 mr-2" />
               История звонков
+              {missedCallsCount > 0 && (
+                <Badge 
+                  variant="destructive" 
+                  className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
+                >
+                  {missedCallsCount}
+                </Badge>
+              )}
             </Button>
           </div>
         </div>
@@ -582,6 +597,12 @@ const Messenger = () => {
         isOpen={isCallHistoryOpen}
         onClose={() => setIsCallHistoryOpen(false)}
         currentUserId={currentUserId}
+        onStartCall={(params) => {
+          setActiveCall({
+            ...params,
+            isInitiator: true,
+          });
+        }}
       />
 
       {/* Create group dialog */}
