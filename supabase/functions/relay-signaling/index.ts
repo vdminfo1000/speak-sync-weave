@@ -53,49 +53,57 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Verify user is a member of the chat/room
-    const { data: membership, error: memberError } = await supabase
-      .from('chat_members')
-      .select('user_id, chat_id')
-      .eq('chat_id', chatId || roomId)
-      .eq('user_id', user.id)
-      .maybeSingle()
+    // For group calls, we don't require chat membership since users are invited directly
+    // The invitation itself serves as authorization
+    const isGroupCall = callType === 'group-video' || callType === 'group-audio';
+    
+    if (!isGroupCall) {
+      // Verify user is a member of the chat for regular calls
+      const { data: membership, error: memberError } = await supabase
+        .from('chat_members')
+        .select('user_id, chat_id')
+        .eq('chat_id', chatId || roomId)
+        .eq('user_id', user.id)
+        .maybeSingle()
 
-    console.log('[relay-signaling] Membership query result:', {
-      userId: user.id,
-      chatId: chatId || roomId,
-      membership,
-      error: memberError
-    })
-
-    if (memberError) {
-      console.error('[relay-signaling] Database error during membership check:', memberError)
-      return new Response(
-        JSON.stringify({ 
-          error: 'Database error checking chat membership',
-          details: memberError.message 
-        }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
-
-    if (!membership) {
-      console.error('[relay-signaling] User is not a member of this chat:', {
+      console.log('[relay-signaling] Membership query result:', {
         userId: user.id,
         chatId: chatId || roomId,
-        messageType: message?.type
+        membership,
+        error: memberError
       })
-      return new Response(
-        JSON.stringify({ 
-          error: 'Not authorized for this chat',
+
+      if (memberError) {
+        console.error('[relay-signaling] Database error during membership check:', memberError)
+        return new Response(
+          JSON.stringify({ 
+            error: 'Database error checking chat membership',
+            details: memberError.message 
+          }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      if (!membership) {
+        console.error('[relay-signaling] User is not a member of this chat:', {
+          userId: user.id,
           chatId: chatId || roomId,
-          userId: user.id
-        }),
-        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+          messageType: message?.type
+        })
+        return new Response(
+          JSON.stringify({ 
+            error: 'Not authorized for this chat',
+            chatId: chatId || roomId,
+            userId: user.id
+          }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+      
+      console.log('[relay-signaling] Membership verified for user:', user.id, 'in chat:', chatId || roomId)
+    } else {
+      console.log('[relay-signaling] Group call - skipping membership check for user:', user.id, 'in room:', roomId)
     }
-    
-    console.log('[relay-signaling] Membership verified for user:', user.id, 'in chat:', chatId || roomId)
 
     // Create authenticated signaling message
     // The 'from' field is now trustworthy since it's set by the server
