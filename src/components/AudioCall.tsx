@@ -38,6 +38,8 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
   const callTimerRef = useRef<NodeJS.Timeout | null>(null);
   const callTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const statsIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const iceCandidatesQueue = useRef<RTCIceCandidateInit[]>([]);
   const isProcessingQueue = useRef(false);
   const reconnectAttempts = useRef(0);
@@ -172,10 +174,12 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
         console.log("Microphone access granted");
       }
       setLocalStream(stream);
+      localStreamRef.current = stream;
 
       // Создаем peer connection
       const pc = new RTCPeerConnection(configuration);
       setPeerConnection(pc);
+      peerConnectionRef.current = pc;
 
       // Добавляем локальные треки
       stream.getTracks().forEach((track) => {
@@ -700,18 +704,27 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
   const cleanup = () => {
     console.log('[AudioCall] Cleaning up call resources');
     
-    if (localStream) {
-      localStream.getTracks().forEach((track) => {
+    // Stop local tracks using ref (more reliable than state)
+    const streamToClean = localStreamRef.current || localStream;
+    if (streamToClean) {
+      streamToClean.getTracks().forEach((track) => {
         track.stop();
-        console.log(`[AudioCall] Stopped ${track.kind} track`);
+        console.log(`[AudioCall] Stopped ${track.kind} track, enabled: ${track.enabled}, readyState: ${track.readyState}`);
       });
-      setLocalStream(null);
+      localStreamRef.current = null;
     }
     
-    if (peerConnection) {
-      peerConnection.close();
+    // Clear audio element srcObject
+    if (audioRef.current) {
+      audioRef.current.srcObject = null;
+    }
+    
+    // Close peer connection using ref
+    const pcToClose = peerConnectionRef.current || peerConnection;
+    if (pcToClose) {
+      pcToClose.close();
       console.log('[AudioCall] Peer connection closed');
-      setPeerConnection(null);
+      peerConnectionRef.current = null;
     }
     
     if (channelRef.current) {
@@ -739,6 +752,8 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
     iceCandidatesQueue.current = [];
     reconnectAttempts.current = 0;
     
+    setLocalStream(null);
+    setPeerConnection(null);
     setCallStatus("ended");
     setCallDuration(0);
     console.log('[AudioCall] Cleanup complete');
