@@ -767,11 +767,28 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
     }
   };
 
-  const handleEndCall = () => {
+  const handleEndCall = async () => {
     // Обновляем статус звонка
     if (isInitiator) {
       const finalStatus = callStatus === "connected" ? "completed" : "no-answer";
       updateCallStatus(currentUserId, otherUserId, callStartTime, finalStatus, callDuration);
+      
+      // Если звонок не был принят, отправляем уведомление о завершении на глобальный канал
+      if (callStatus === "connecting") {
+        try {
+          const callEndChannel = supabase.channel(`global-call-notifications-${otherUserId}`);
+          await callEndChannel.subscribe();
+          await callEndChannel.send({
+            type: "broadcast",
+            event: "call-ended",
+            payload: { chatId, callerId: currentUserId },
+          });
+          await supabase.removeChannel(callEndChannel);
+          console.log('[AudioCall] Sent call-ended notification to recipient');
+        } catch (err) {
+          console.error('[AudioCall] Error sending call-ended notification:', err);
+        }
+      }
     }
 
     if (channelRef.current) {
