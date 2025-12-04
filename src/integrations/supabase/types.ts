@@ -547,6 +547,8 @@ export type Database = {
           is_public: boolean
           last_seen: string | null
           phone_number: string | null
+          show_avatar: boolean | null
+          show_online_status: boolean | null
           status: string | null
           updated_at: string | null
           username: string | null
@@ -559,6 +561,8 @@ export type Database = {
           is_public?: boolean
           last_seen?: string | null
           phone_number?: string | null
+          show_avatar?: boolean | null
+          show_online_status?: boolean | null
           status?: string | null
           updated_at?: string | null
           username?: string | null
@@ -571,6 +575,8 @@ export type Database = {
           is_public?: boolean
           last_seen?: string | null
           phone_number?: string | null
+          show_avatar?: boolean | null
+          show_online_status?: boolean | null
           status?: string | null
           updated_at?: string | null
           username?: string | null

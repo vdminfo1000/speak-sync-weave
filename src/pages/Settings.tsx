@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Volume2, Bell, Music } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { ArrowLeft, Volume2, Bell, Music, Shield, Eye, Image } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import RingtoneSettings from "@/components/RingtoneSettings";
@@ -16,6 +17,11 @@ const Settings = () => {
   const [ringtoneVolume, setRingtoneVolume] = useState(80);
   const [messageVolume, setMessageVolume] = useState(60);
   const [isRingtoneSettingsOpen, setIsRingtoneSettingsOpen] = useState(false);
+  
+  // Privacy settings
+  const [showOnlineStatus, setShowOnlineStatus] = useState(true);
+  const [showAvatar, setShowAvatar] = useState(true);
+  const [isLoadingPrivacy, setIsLoadingPrivacy] = useState(true);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -34,6 +40,19 @@ const Settings = () => {
       if (savedNotificationVolume) setNotificationVolume(parseInt(savedNotificationVolume));
       if (savedRingtoneVolume) setRingtoneVolume(parseInt(savedRingtoneVolume));
       if (savedMessageVolume) setMessageVolume(parseInt(savedMessageVolume));
+      
+      // Load privacy settings from database
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("show_online_status, show_avatar")
+        .eq("id", session.user.id)
+        .single();
+      
+      if (profile) {
+        setShowOnlineStatus(profile.show_online_status ?? true);
+        setShowAvatar(profile.show_avatar ?? true);
+      }
+      setIsLoadingPrivacy(false);
     };
     
     checkAuth();
@@ -77,6 +96,41 @@ const Settings = () => {
     oscillator.stop(audioContext.currentTime + 0.1);
   };
 
+  const handlePrivacyChange = async (field: 'show_online_status' | 'show_avatar', value: boolean) => {
+    if (!currentUserId) return;
+    
+    // Optimistic update
+    if (field === 'show_online_status') {
+      setShowOnlineStatus(value);
+    } else {
+      setShowAvatar(value);
+    }
+    
+    const { error } = await supabase
+      .from("profiles")
+      .update({ [field]: value })
+      .eq("id", currentUserId);
+    
+    if (error) {
+      // Revert on error
+      if (field === 'show_online_status') {
+        setShowOnlineStatus(!value);
+      } else {
+        setShowAvatar(!value);
+      }
+      toast({
+        title: "Ошибка",
+        description: "Не удалось сохранить настройки приватности",
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: "Сохранено",
+        description: "Настройки приватности обновлены",
+      });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <div className="container max-w-2xl mx-auto p-4">
@@ -88,6 +142,51 @@ const Settings = () => {
         </div>
 
         <div className="space-y-6">
+          {/* Privacy Settings */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Shield className="h-5 w-5" />
+                Приватность
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Eye className="h-4 w-4 text-muted-foreground" />
+                  <div>
+                    <Label>Показывать онлайн-статус</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Другие пользователи смогут видеть, когда вы онлайн
+                    </p>
+                  </div>
+                </div>
+                <Switch
+                  checked={showOnlineStatus}
+                  onCheckedChange={(checked) => handlePrivacyChange('show_online_status', checked)}
+                  disabled={isLoadingPrivacy}
+                />
+              </div>
+              
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Image className="h-4 w-4 text-muted-foreground" />
+                  <div>
+                    <Label>Показывать фото профиля</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Другие пользователи смогут видеть вашу фотографию
+                    </p>
+                  </div>
+                </div>
+                <Switch
+                  checked={showAvatar}
+                  onCheckedChange={(checked) => handlePrivacyChange('show_avatar', checked)}
+                  disabled={isLoadingPrivacy}
+                />
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Sound Settings */}
           <Card>
             <CardHeader>
