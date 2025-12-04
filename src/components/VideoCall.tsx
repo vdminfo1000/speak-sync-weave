@@ -6,6 +6,7 @@ import { Phone, PhoneOff, Mic, MicOff, Video as VideoIcon, VideoOff, Minimize2, 
 import { toast } from "sonner";
 import InviteToGroupCallDialog from "./InviteToGroupCallDialog";
 import { useCallHistory } from "@/hooks/useCallHistory";
+import { playBusyTone } from "@/utils/busyTone";
 
 interface VideoCallProps {
   isOpen: boolean;
@@ -177,6 +178,7 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
       .on("broadcast", { event: "call-busy" }, (payload: any) => {
         console.log('[VideoCall] Received busy signal:', payload);
         if (payload.payload?.userId === otherUserId) {
+          playBusyTone();
           toast.error("Абонент занят, попробуйте позже");
           handleEndCall();
         }
