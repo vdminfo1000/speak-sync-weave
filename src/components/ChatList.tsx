@@ -252,27 +252,41 @@ const ChatList = ({ onSelectChat, selectedChatId }: ChatListProps) => {
             key={chat.id}
             onClick={async () => {
               onSelectChat(chat.id);
-              // Mark all messages as read
+              // Mark unread messages from other users as read
               if (chat.unread_count && chat.unread_count > 0) {
                 const { data: { user } } = await supabase.auth.getUser();
                 if (user) {
+                  // Only get messages NOT sent by current user
                   const { data: messages } = await supabase
                     .from("messages")
                     .select("id")
-                    .eq("chat_id", chat.id);
+                    .eq("chat_id", chat.id)
+                    .neq("sender_id", user.id);
                   
                   if (messages && messages.length > 0) {
                     const messageIds = messages.map(m => m.id);
-                    await supabase
+                    
+                    // Check which messages are already read
+                    const { data: alreadyRead } = await supabase
                       .from("message_reads")
-                      .upsert(
-                        messageIds.map(msgId => ({
-                          message_id: msgId,
-                          user_id: user.id,
-                          read_at: new Date().toISOString()
-                        })),
-                        { onConflict: "message_id,user_id" }
-                      );
+                      .select("message_id")
+                      .in("message_id", messageIds)
+                      .eq("user_id", user.id);
+                    
+                    const alreadyReadIds = new Set(alreadyRead?.map(r => r.message_id) || []);
+                    const unreadMessageIds = messageIds.filter(id => !alreadyReadIds.has(id));
+                    
+                    if (unreadMessageIds.length > 0) {
+                      await supabase
+                        .from("message_reads")
+                        .insert(
+                          unreadMessageIds.map(msgId => ({
+                            message_id: msgId,
+                            user_id: user.id,
+                            read_at: new Date().toISOString()
+                          }))
+                        );
+                    }
                   }
                 }
               }
