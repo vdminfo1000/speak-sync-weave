@@ -76,6 +76,63 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
       iceCandidatePoolSize: 10,
     };
 
+  // Обработчик visibility change для сохранения соединения при сворачивании
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      console.log('[VideoCall] Visibility changed:', document.visibilityState);
+      
+      if (document.visibilityState === 'hidden') {
+        // Страница скрыта - сохраняем треки активными
+        console.log('[VideoCall] Page hidden, keeping tracks alive');
+        
+        // Предотвращаем паузу видео при сворачивании
+        if (localVideoRef.current) {
+          localVideoRef.current.play().catch(() => {});
+        }
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.play().catch(() => {});
+        }
+      } else if (document.visibilityState === 'visible') {
+        // Страница снова видима
+        console.log('[VideoCall] Page visible again, resuming playback');
+        
+        // Возобновляем воспроизведение
+        if (localVideoRef.current && localStreamRef.current) {
+          localVideoRef.current.srcObject = localStreamRef.current;
+          localVideoRef.current.play().catch(() => {});
+        }
+        if (remoteVideoRef.current && remoteStreamRef.current) {
+          remoteVideoRef.current.srcObject = remoteStreamRef.current;
+          remoteVideoRef.current.play().catch(() => {});
+        }
+        
+        // Проверяем состояние соединения
+        const pc = peerConnectionRef.current;
+        if (pc) {
+          console.log('[VideoCall] Connection state after visibility:', {
+            iceState: pc.iceConnectionState,
+            connectionState: pc.connectionState,
+            signalingState: pc.signalingState
+          });
+          
+          // Если соединение разорвано, пробуем переподключиться
+          if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+            console.log('[VideoCall] Connection lost while hidden, attempting ICE restart');
+            if (pc.restartIce) {
+              pc.restartIce();
+            }
+          }
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
   useEffect(() => {
     if (!isOpen) return;
 

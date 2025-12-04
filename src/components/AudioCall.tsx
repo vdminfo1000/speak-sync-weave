@@ -71,6 +71,55 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
       iceCandidatePoolSize: 10,
     };
 
+  // Обработчик visibility change для сохранения соединения при сворачивании
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      console.log('[AudioCall] Visibility changed:', document.visibilityState);
+      
+      if (document.visibilityState === 'hidden') {
+        // Страница скрыта - сохраняем треки активными
+        console.log('[AudioCall] Page hidden, keeping audio track alive');
+        
+        // Предотвращаем паузу аудио при сворачивании
+        if (audioRef.current) {
+          audioRef.current.play().catch(() => {});
+        }
+      } else if (document.visibilityState === 'visible') {
+        // Страница снова видима
+        console.log('[AudioCall] Page visible again');
+        
+        // Возобновляем воспроизведение
+        if (audioRef.current) {
+          audioRef.current.play().catch(() => {});
+        }
+        
+        // Проверяем состояние соединения
+        const pc = peerConnectionRef.current;
+        if (pc) {
+          console.log('[AudioCall] Connection state after visibility:', {
+            iceState: pc.iceConnectionState,
+            connectionState: pc.connectionState,
+            signalingState: pc.signalingState
+          });
+          
+          // Если соединение разорвано, пробуем переподключиться
+          if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+            console.log('[AudioCall] Connection lost while hidden, attempting ICE restart');
+            if (pc.restartIce) {
+              pc.restartIce();
+            }
+          }
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
   useEffect(() => {
     if (!isOpen) return;
 
