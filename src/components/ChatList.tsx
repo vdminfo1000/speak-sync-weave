@@ -2,9 +2,8 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { formatDistanceToNow } from "date-fns";
-import { ru } from "date-fns/locale";
 import { MessageCircle } from "lucide-react";
+import { isUserOnline } from "@/utils/userStatus";
 
 interface Chat {
   id: string;
@@ -242,6 +241,9 @@ const ChatList = ({ onSelectChat, selectedChatId }: ChatListProps) => {
         const displayName = chat.is_group
           ? chat.name
           : (chat.other_user?.full_name || chat.other_user?.username || "Неизвестный");
+        const isOnline = chat.other_user 
+          ? isUserOnline(chat.other_user.last_seen, chat.other_user.status)
+          : false;
 
         return (
           <button
@@ -291,31 +293,26 @@ const ChatList = ({ onSelectChat, selectedChatId }: ChatListProps) => {
               selectedChatId === chat.id ? "bg-secondary" : ""
             }`}
           >
-            <Avatar className="w-12 h-12">
-              <AvatarImage src={chat.avatar_url || chat.other_user?.avatar_url || undefined} />
-              <AvatarFallback className="bg-primary/10 text-primary">
-                {displayName?.charAt(0).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
+            <div className="relative">
+              <Avatar className="w-12 h-12">
+                <AvatarImage src={chat.avatar_url || chat.other_user?.avatar_url || undefined} />
+                <AvatarFallback className="bg-primary/10 text-primary">
+                  {displayName?.charAt(0).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              {!chat.is_group && isOnline && (
+                <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-background" />
+              )}
+            </div>
 
             <div className="flex-1 min-w-0 text-left">
               <div className="flex items-center justify-between mb-1">
                 <h3 className="font-semibold truncate">{displayName}</h3>
-                <div className="flex items-center gap-2">
-                  {chat.last_message && (
-                    <span className="text-xs text-muted-foreground">
-                      {formatDistanceToNow(new Date(chat.last_message.created_at), {
-                        addSuffix: true,
-                        locale: ru,
-                      })}
-                    </span>
-                  )}
-                  {chat.unread_count && chat.unread_count > 0 && (
-                    <Badge variant="default" className="ml-auto rounded-full h-5 min-w-5 flex items-center justify-center px-1.5">
-                      {chat.unread_count > 99 ? '99+' : chat.unread_count}
-                    </Badge>
-                  )}
-                </div>
+                {chat.unread_count && chat.unread_count > 0 && (
+                  <Badge variant="default" className="rounded-full h-5 min-w-5 flex items-center justify-center px-1.5">
+                    {chat.unread_count > 99 ? '99+' : chat.unread_count}
+                  </Badge>
+                )}
               </div>
               {chat.last_message && (
                 <p className="text-sm text-muted-foreground truncate">
