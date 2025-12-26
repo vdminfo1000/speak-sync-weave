@@ -134,15 +134,10 @@ Deno.serve(async (req) => {
     
     console.log('[relay-signaling] Broadcasting to channel:', channelName)
 
-    // Send to channel using service role for reliable delivery
-    const serviceSupabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    )
+    // Send to channel using service role for reliable delivery via HTTP broadcast
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 
-    const channel = serviceSupabase.channel(channelName)
-    await channel.subscribe()
-    
     console.log('[relay-signaling] Sending broadcast message:', {
       event: 'signaling',
       messageType: message.type,
@@ -150,14 +145,33 @@ Deno.serve(async (req) => {
       to: to
     })
     
-    await channel.send({
-      type: 'broadcast',
-      event: 'signaling',
-      payload: authenticatedPayload
-    })
+    // Use direct HTTP broadcast API for guaranteed delivery
+    const broadcastResponse = await fetch(
+      `${supabaseUrl}/realtime/v1/api/broadcast`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': serviceRoleKey,
+          'Authorization': `Bearer ${serviceRoleKey}`,
+        },
+        body: JSON.stringify({
+          messages: [
+            {
+              topic: channelName,
+              event: 'signaling',
+              payload: authenticatedPayload,
+            }
+          ]
+        }),
+      }
+    )
 
-    // Clean up
-    await serviceSupabase.removeChannel(channel)
+    if (!broadcastResponse.ok) {
+      const errorText = await broadcastResponse.text()
+      console.error('[relay-signaling] Broadcast failed:', broadcastResponse.status, errorText)
+      throw new Error(`Broadcast failed: ${broadcastResponse.status}`)
+    }
 
     console.log(`[relay-signaling] Successfully relayed ${message.type} from ${user.id} to ${to || 'all'} in ${channelName}`)
 
