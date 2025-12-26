@@ -51,6 +51,7 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
   const isProcessingQueue = useRef(false);
   const reconnectAttempts = useRef(0);
   const maxReconnectAttempts = 3;
+  const callInitStartedAtRef = useRef<number>(0);
 
   const { recordCall, updateCallStatus } = useCallHistory(currentUserId);
 
@@ -328,6 +329,16 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
     try {
       // Отмечаем звонок как активный для Safari iOS
       isCallActiveRef.current = true;
+      callInitStartedAtRef.current = Date.now();
+      
+      console.log('[VideoCall] initializeCall start', {
+        ua: navigator.userAgent,
+        isInitiator,
+        chatId,
+        currentUserId,
+        otherUserId,
+        ts: new Date().toISOString(),
+      });
       
       if (import.meta.env.DEV) {
         console.log("Initializing call, requesting media access...");
@@ -516,6 +527,22 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
           }
         } else if (pc.iceConnectionState === "failed") {
           console.error('[VideoCall] ✗ ICE connection failed');
+
+          const safariIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) &&
+            /WebKit/.test(navigator.userAgent) &&
+            !/CriOS|FxiOS|OPiOS|mercury/i.test(navigator.userAgent);
+
+          const sinceInitMs = Date.now() - (callInitStartedAtRef.current || Date.now());
+          if (safariIOS && callStatus === 'connecting' && sinceInitMs < 8000) {
+            // iOS Safari может кратковременно отдавать failed на старте — даём время и не завершаем звонок
+            console.warn('[VideoCall] Safari iOS: ignoring early ICE failed', { sinceInitMs });
+            try {
+              pc.restartIce?.();
+            } catch (e) {
+              console.error('[VideoCall] Safari iOS restartIce error:', e);
+            }
+            return;
+          }
           
           // Пытаемся переподключиться
           if (reconnectAttempts.current < maxReconnectAttempts) {
@@ -991,6 +1018,17 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
   };
 
   const handleEndCall = async () => {
+    console.log('[VideoCall] handleEndCall called', {
+      isInitiator,
+      callStatus,
+      chatId,
+      currentUserId,
+      otherUserId,
+      ts: new Date().toISOString(),
+      pc: peerConnectionRef.current?.iceConnectionState,
+    });
+    console.log('[VideoCall] handleEndCall stack:', new Error().stack);
+
     // Обновляем статус звонка
     if (isInitiator) {
       const finalStatus = callStatus === "connected" ? "completed" : "no-answer";

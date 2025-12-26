@@ -360,6 +360,7 @@ const Messenger = () => {
   };
 
   const handleCloseCall = () => {
+    console.log('[Messenger] handleCloseCall: closing activeCall');
     setActiveCall(null);
   };
 
