@@ -72,6 +72,9 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
       iceCandidatePoolSize: 10,
     };
 
+  // Ref для отслеживания активного состояния звонка (для Safari iOS)
+  const isCallActiveRef = useRef(false);
+
   // Обработчик visibility change для сохранения соединения при сворачивании
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -115,8 +118,22 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
     };
 
     // Обработчик для закрытия страницы / навигации
-    const handleBeforeUnload = () => {
-      console.log('[AudioCall] Page unloading, cleaning up...');
+    // ВАЖНО: В Safari iOS pagehide может срабатывать при переключении между приложениями
+    // Поэтому НЕ вызываем cleanup если звонок активен
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      console.log('[AudioCall] Page unloading, isCallActive:', isCallActiveRef.current);
+      
+      // Safari iOS: не очищаем ресурсы при pagehide если звонок активен
+      const isSafariIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) && 
+                          /WebKit/.test(navigator.userAgent) && 
+                          !/CriOS|FxiOS|OPiOS|mercury/.test(navigator.userAgent);
+      
+      if (isSafariIOS && isCallActiveRef.current) {
+        console.log('[AudioCall] Safari iOS: keeping call alive during page hide');
+        return;
+      }
+      
+      // Останавливаем все стримы синхронно только при реальном закрытии страницы
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach(track => track.stop());
       }
@@ -125,9 +142,29 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
       }
     };
 
-    const handlePageHide = () => {
-      console.log('[AudioCall] Page hide event, cleaning up...');
-      handleBeforeUnload();
+    const handlePageHide = (e: PageTransitionEvent) => {
+      console.log('[AudioCall] Page hide event, persisted:', e.persisted, 'isCallActive:', isCallActiveRef.current);
+      
+      // Safari iOS: e.persisted = true означает, что страница может быть восстановлена
+      // В этом случае НЕ очищаем ресурсы
+      const isSafariIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) && 
+                          /WebKit/.test(navigator.userAgent) && 
+                          !/CriOS|FxiOS|OPiOS|mercury/.test(navigator.userAgent);
+      
+      if (isSafariIOS && (e.persisted || isCallActiveRef.current)) {
+        console.log('[AudioCall] Safari iOS: preserving call state during page hide');
+        return;
+      }
+      
+      if (!e.persisted) {
+        // Manually handle cleanup without calling handleBeforeUnload
+        if (localStreamRef.current) {
+          localStreamRef.current.getTracks().forEach(track => track.stop());
+        }
+        if (peerConnectionRef.current) {
+          peerConnectionRef.current.close();
+        }
+      }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -253,6 +290,9 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
 
   const initializeCall = async () => {
     try {
+      // Отмечаем звонок как активный для Safari iOS
+      isCallActiveRef.current = true;
+      
       if (import.meta.env.DEV) {
         console.log("Initializing audio call, requesting microphone access...");
       }
@@ -827,6 +867,9 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
 
   const cleanup = () => {
     console.log('[AudioCall] Cleaning up call resources');
+    
+    // Отмечаем звонок как неактивный
+    isCallActiveRef.current = false;
     
     // Stop local tracks using ref (more reliable than state)
     const streamToClean = localStreamRef.current || localStream;
