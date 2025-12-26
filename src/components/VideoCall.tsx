@@ -1182,13 +1182,13 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
   if (isMinimized) {
     return (
       <>
-        {/* Скрытые видео элементы для сохранения потоков */}
+        {/* Скрытое локальное видео для сохранения потока */}
         <div className="hidden">
           <video
-            ref={remoteVideoRef}
+            ref={localVideoRef}
             autoPlay
             playsInline
-            muted={false}
+            muted={true}
           />
         </div>
         
@@ -1209,12 +1209,13 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
               </Button>
             </div>
             
+            {/* Видео собеседника в миниатюре */}
             <div className="relative aspect-video bg-secondary rounded overflow-hidden mb-2">
               <video
-                ref={localVideoRef}
+                ref={remoteVideoRef}
                 autoPlay
                 playsInline
-                muted={true}
+                muted={false}
                 className="w-full h-full object-cover"
               />
             </div>
