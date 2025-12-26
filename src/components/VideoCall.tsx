@@ -632,8 +632,11 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
 
     } catch (error) {
       console.error("Error initializing call:", error);
+      isCallActiveRef.current = false;
+      setCallStatus("ended");
       toast.error("Не удалось получить доступ к камере/микрофону");
-      onClose();
+      // ВАЖНО: не закрываем окно автоматически (особенно на iOS Safari).
+      // Пользователь сможет разрешить доступ и повторить попытку или завершить звонок вручную.
     }
   };
 

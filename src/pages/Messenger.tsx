@@ -16,6 +16,7 @@ import { useMissedCallsCount } from "@/hooks/useMissedCallsCount";
 import { LogOut, Plus, Shield, MessageCircle, Bell, User, Phone, Users, Radio } from "lucide-react";
 import { toast } from "sonner";
 import { getUserFriendlyError } from "@/lib/errorHandler";
+import { requestCallMediaPermission } from "@/lib/callMedia";
 import IncomingCallNotification from "@/components/IncomingCallNotification";
 import VideoCall from "@/components/VideoCall";
 import AudioCall from "@/components/AudioCall";
@@ -261,6 +262,16 @@ const Messenger = () => {
 
   const handleAcceptCall = async () => {
     if (!incomingCall) return;
+
+    // iOS Safari: getUserMedia должен быть вызван в рамках user gesture.
+    // Делаем preflight до любых await.
+    try {
+      await requestCallMediaPermission(incomingCall.callType);
+    } catch (error: any) {
+      console.error("[Messenger] Media permission error:", error);
+      toast.error(getUserFriendlyError(error) || "Разрешите доступ к камере/микрофону");
+      return;
+    }
     
     console.log('[Messenger] Accepting call:', incomingCall);
     

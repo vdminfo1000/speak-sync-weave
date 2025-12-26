@@ -7,6 +7,8 @@ import { Phone, PhoneIncoming, PhoneOutgoing, PhoneMissed, Video } from "lucide-
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { toast } from "sonner";
+import { getUserFriendlyError } from "@/lib/errorHandler";
+import { requestCallMediaPermission } from "@/lib/callMedia";
 
 interface CallHistoryProps {
   isOpen: boolean;
@@ -115,6 +117,17 @@ const CallHistory = ({ isOpen, onClose, currentUserId, onStartCall }: CallHistor
     const isIncoming = call.receiver_id === currentUserId;
     const otherUserId = isIncoming ? call.caller_id : call.receiver_id;
     const otherUserName = isIncoming ? call.caller_name : call.receiver_name;
+    const callType = call.call_type.includes("video") ? "video" : "audio";
+
+    // iOS Safari: getUserMedia должен быть вызван в рамках user gesture.
+    // Делаем preflight до любых await.
+    try {
+      await requestCallMediaPermission(callType);
+    } catch (error: any) {
+      console.error("[CallHistory] Media permission error:", error);
+      toast.error(getUserFriendlyError(error) || "Разрешите доступ к камере/микрофону");
+      return;
+    }
 
     // Find or create a private chat with this user
     try {
@@ -159,10 +172,6 @@ const CallHistory = ({ isOpen, onClose, currentUserId, onStartCall }: CallHistor
           { chat_id: chatId, user_id: otherUserId, role: "member" },
         ]);
       }
-
-      const callType = call.call_type.includes("video") ? "video" : "audio";
-      
-      // Отправляем уведомление о входящем звонке получателю
       const channel = supabase.channel(`global-call-notifications-${otherUserId}`);
       await channel.subscribe();
       await channel.send({
