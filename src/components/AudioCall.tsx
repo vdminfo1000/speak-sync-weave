@@ -46,6 +46,7 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
   const reconnectAttempts = useRef(0);
   const maxReconnectAttempts = 3;
   const callInitStartedAtRef = useRef<number>(0);
+  const disconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const { recordCall, updateCallStatus } = useCallHistory(currentUserId);
 
