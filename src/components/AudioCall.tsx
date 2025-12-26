@@ -593,6 +593,55 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
     }
   };
 
+  // Специальная функция для отправки end-call с keepalive (работает в Safari)
+  const sendEndCallSignal = () => {
+    console.log('[AudioCall] Sending end-call with keepalive for Safari compatibility');
+    
+    try {
+      const token = localStorage.getItem('sb-gfbssmplzvfubdidprom-auth-token');
+      let accessToken = '';
+      if (token) {
+        try {
+          const parsed = JSON.parse(token);
+          accessToken = parsed.access_token || '';
+        } catch (e) {
+          console.error('[AudioCall] Failed to parse auth token:', e);
+        }
+      }
+
+      if (!accessToken) {
+        console.error('[AudioCall] No access token for end-call signal');
+        return;
+      }
+
+      const body = JSON.stringify({
+        to: otherUserId,
+        message: { type: 'end-call' },
+        chatId,
+        callType: 'audio'
+      });
+
+      // Используем fetch с keepalive: true - это гарантирует доставку в Safari
+      // даже если страница закрывается или компонент размонтируется
+      fetch('https://gfbssmplzvfubdidprom.supabase.co/functions/v1/relay-signaling', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+          'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdmYnNzbXBsenZmdWJkaWRwcm9tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMwMzI4MTAsImV4cCI6MjA3ODYwODgxMH0.abI9fBl_dnHTKhHLPxh1kpDBU1ES_JT_dhv-502hHZo'
+        },
+        body,
+        keepalive: true // Критично для Safari - запрос завершится даже при закрытии страницы
+      }).then(res => {
+        console.log('[AudioCall] End-call signal sent, status:', res.status);
+      }).catch(err => {
+        console.error('[AudioCall] End-call signal error:', err);
+      });
+    } catch (error) {
+      console.error('[AudioCall] Error sending end-call signal:', error);
+    }
+  };
+
   const sendSignalingMessage = async (message: any) => {
     try {
       console.log('[AudioCall] Sending signaling message:', {
@@ -873,8 +922,8 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
       }
     }
 
-    // Всегда пытаемся отправить end-call через edge function (не зависит от локального realtime channel)
-    await sendSignalingMessage({ type: "end-call" });
+    // Используем синхронную функцию с keepalive для Safari
+    sendEndCallSignal();
 
     cleanup();
     onClose();
