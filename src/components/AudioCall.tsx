@@ -1097,17 +1097,22 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={() => {}}>
+    <>
+    <Dialog open={isOpen && !showInviteDialog} onOpenChange={() => {}}>
       <DialogContent 
         className="max-w-md"
         onCloseClick={handleEndCall}
         onInteractOutside={(e) => {
           e.preventDefault();
-          setIsMinimized(true);
+          if (!showInviteDialog) {
+            setIsMinimized(true);
+          }
         }}
         onEscapeKeyDown={(e) => {
           e.preventDefault();
-          setIsMinimized(true);
+          if (!showInviteDialog) {
+            setIsMinimized(true);
+          }
         }}
       >
         <DialogHeader>
@@ -1184,15 +1189,17 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
         />
       </DialogContent>
 
-      <InviteToGroupCallDialog
-        isOpen={showInviteDialog}
-        onClose={() => setShowInviteDialog(false)}
-        currentUserId={currentUserId}
-        roomId={chatId}
-        callType="audio"
-        onInvite={handleInviteToGroup}
-      />
     </Dialog>
+
+    <InviteToGroupCallDialog
+      isOpen={showInviteDialog}
+      onClose={() => setShowInviteDialog(false)}
+      currentUserId={currentUserId}
+      roomId={chatId}
+      callType="audio"
+      onInvite={handleInviteToGroup}
+    />
+    </>
   );
 };
 
