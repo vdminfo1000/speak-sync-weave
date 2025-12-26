@@ -1055,9 +1055,9 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
       }
     }
 
-    if (channelRef.current) {
-      sendSignalingMessage({ type: "end-call" });
-    }
+    // Всегда пытаемся отправить end-call через edge function (не зависит от локального realtime channel)
+    await sendSignalingMessage({ type: "end-call" });
+
     cleanup();
     onClose();
   };
