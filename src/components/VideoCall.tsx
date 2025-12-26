@@ -1317,17 +1317,22 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={() => {}}>
+    <>
+    <Dialog open={isOpen && !showInviteDialog} onOpenChange={() => {}}>
       <DialogContent 
         className="max-w-4xl"
         onCloseClick={handleEndCall}
         onInteractOutside={(e) => {
           e.preventDefault();
-          setIsMinimized(true);
+          if (!showInviteDialog) {
+            setIsMinimized(true);
+          }
         }}
         onEscapeKeyDown={(e) => {
           e.preventDefault();
-          setIsMinimized(true);
+          if (!showInviteDialog) {
+            setIsMinimized(true);
+          }
         }}
       >
         <DialogHeader>
@@ -1463,15 +1468,17 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
         </div>
       </DialogContent>
 
-      <InviteToGroupCallDialog
-        isOpen={showInviteDialog}
-        onClose={() => setShowInviteDialog(false)}
-        currentUserId={currentUserId}
-        roomId={chatId}
-        callType="video"
-        onInvite={handleInviteToGroup}
-      />
     </Dialog>
+
+    <InviteToGroupCallDialog
+      isOpen={showInviteDialog}
+      onClose={() => setShowInviteDialog(false)}
+      currentUserId={currentUserId}
+      roomId={chatId}
+      callType="video"
+      onInvite={handleInviteToGroup}
+    />
+    </>
   );
 };
 
