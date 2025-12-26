@@ -45,6 +45,7 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
   const isProcessingQueue = useRef(false);
   const reconnectAttempts = useRef(0);
   const maxReconnectAttempts = 3;
+  const callInitStartedAtRef = useRef<number>(0);
 
   const { recordCall, updateCallStatus } = useCallHistory(currentUserId);
 
@@ -292,6 +293,16 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
     try {
       // Отмечаем звонок как активный для Safari iOS
       isCallActiveRef.current = true;
+      callInitStartedAtRef.current = Date.now();
+
+      console.log('[AudioCall] initializeCall start', {
+        ua: navigator.userAgent,
+        isInitiator,
+        chatId,
+        currentUserId,
+        otherUserId,
+        ts: new Date().toISOString(),
+      });
       
       if (import.meta.env.DEV) {
         console.log("Initializing audio call, requesting microphone access...");
@@ -446,6 +457,21 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
           }
         } else if (pc.iceConnectionState === "failed") {
           console.error('[AudioCall] ✗ ICE connection failed');
+
+          const safariIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) &&
+            /WebKit/.test(navigator.userAgent) &&
+            !/CriOS|FxiOS|OPiOS|mercury/i.test(navigator.userAgent);
+
+          const sinceInitMs = Date.now() - (callInitStartedAtRef.current || Date.now());
+          if (safariIOS && callStatus === 'connecting' && sinceInitMs < 8000) {
+            console.warn('[AudioCall] Safari iOS: ignoring early ICE failed', { sinceInitMs });
+            try {
+              pc.restartIce?.();
+            } catch (e) {
+              console.error('[AudioCall] Safari iOS restartIce error:', e);
+            }
+            return;
+          }
           
           // Пытаемся переподключиться
           if (reconnectAttempts.current < maxReconnectAttempts) {
@@ -810,6 +836,17 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
   };
 
   const handleEndCall = async () => {
+    console.log('[AudioCall] handleEndCall called', {
+      isInitiator,
+      callStatus,
+      chatId,
+      currentUserId,
+      otherUserId,
+      ts: new Date().toISOString(),
+      pc: peerConnectionRef.current?.iceConnectionState,
+    });
+    console.log('[AudioCall] handleEndCall stack:', new Error().stack);
+
     // Обновляем статус звонка
     if (isInitiator) {
       const finalStatus = callStatus === "connected" ? "completed" : "no-answer";
