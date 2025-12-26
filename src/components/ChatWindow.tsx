@@ -10,6 +10,7 @@ import { ru } from "date-fns/locale";
 import { toast } from "sonner";
 import { z } from "zod";
 import { getUserFriendlyError } from "@/lib/errorHandler";
+import { requestCallMediaPermission } from "@/lib/callMedia";
 import { isUserOnline, getLastSeenText } from "@/utils/userStatus";
 import FileUpload from "./FileUpload";
 import MessageActions from "./MessageActions";
@@ -893,6 +894,16 @@ const ChatWindow = ({ chatId, onBack, onStartCall }: ChatWindowProps) => {
   const handleStartCall = async (callType: "audio" | "video") => {
     if (!otherUserId || !currentUserId || !chatName) {
       toast.error("Не удалось определить собеседника");
+      return;
+    }
+
+    // iOS Safari: getUserMedia должен быть вызван в рамках user gesture.
+    // Делаем preflight до любых await (включая запросы к БД).
+    try {
+      await requestCallMediaPermission(callType);
+    } catch (error: any) {
+      console.error("[ChatWindow] Media permission error:", error);
+      toast.error(getUserFriendlyError(error) || "Разрешите доступ к камере/микрофону");
       return;
     }
     

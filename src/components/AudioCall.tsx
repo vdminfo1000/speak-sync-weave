@@ -559,8 +559,10 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
 
     } catch (error) {
       console.error("Error initializing call:", error);
+      isCallActiveRef.current = false;
+      setCallStatus("ended");
       toast.error("Не удалось получить доступ к микрофону");
-      onClose();
+      // ВАЖНО: не закрываем окно автоматически (особенно на iOS Safari).
     }
   };
 
