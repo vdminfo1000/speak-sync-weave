@@ -38,6 +38,7 @@ const Messenger = () => {
   const [isCallHistoryOpen, setIsCallHistoryOpen] = useState(false);
   const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
   const [isPublicChannelsOpen, setIsPublicChannelsOpen] = useState(false);
+  const [isChatsMenuOpen, setIsChatsMenuOpen] = useState(false);
   const [isSocialNetworkOpen, setIsSocialNetworkOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string>("");
@@ -469,38 +470,13 @@ const Messenger = () => {
 
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="p-4 space-y-2">
-            {/* Buttons row */}
+            {/* Text buttons row */}
             <div className="flex gap-2 mb-2">
-              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <Dialog open={isChatsMenuOpen} onOpenChange={setIsChatsMenuOpen}>
                 <DialogTrigger asChild>
-                  <Button variant="outline" className="flex-1" title="Новый чат">
-                    <Plus className="w-4 h-4" />
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Отправить запрос на чат</DialogTitle>
-                  </DialogHeader>
-                  <ContactSearch
-                    onSelectContact={(profile) => sendChatRequest(profile.id)}
-                    currentUserId={currentUserId}
-                  />
-                </DialogContent>
-              </Dialog>
-
-              <Button 
-                variant="outline" 
-                className="flex-1"
-                onClick={() => setIsCreateGroupOpen(true)}
-                title="Создать группу"
-              >
-                <Users className="w-4 h-4" />
-              </Button>
-
-              <Dialog open={isRequestsOpen} onOpenChange={setIsRequestsOpen}>
-                <DialogTrigger asChild>
-                  <Button variant="outline" className="flex-1 relative" title="Запросы">
-                    <Bell className="w-4 h-4" />
+                  <Button variant="outline" className="flex-1 relative">
+                    <MessageCircle className="w-4 h-4 mr-2" />
+                    Чаты
                     {pendingRequestsCount > 0 && (
                       <Badge 
                         variant="destructive" 
@@ -511,42 +487,107 @@ const Messenger = () => {
                     )}
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-2xl">
+                <DialogContent className="max-w-md">
                   <DialogHeader>
-                    <DialogTitle>Запросы на чат</DialogTitle>
+                    <DialogTitle>Управление чатами</DialogTitle>
                   </DialogHeader>
-                  <ChatRequests
-                    currentUserId={currentUserId}
-                    onRequestAccepted={(chatId) => {
-                      setIsRequestsOpen(false);
-                      setSelectedChatId(chatId);
-                    }}
-                  />
+                  <div className="space-y-3 pt-2">
+                    <Button 
+                      variant="outline" 
+                      className="w-full justify-start"
+                      onClick={() => {
+                        setIsChatsMenuOpen(false);
+                        setIsDialogOpen(true);
+                      }}
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Новый чат
+                    </Button>
+                    
+                    <Button 
+                      variant="outline" 
+                      className="w-full justify-start"
+                      onClick={() => {
+                        setIsChatsMenuOpen(false);
+                        setIsCreateGroupOpen(true);
+                      }}
+                    >
+                      <Users className="w-4 h-4 mr-2" />
+                      Создать группу
+                    </Button>
+                    
+                    <Button 
+                      variant="outline" 
+                      className="w-full justify-start relative"
+                      onClick={() => {
+                        setIsChatsMenuOpen(false);
+                        setIsRequestsOpen(true);
+                      }}
+                    >
+                      <Bell className="w-4 h-4 mr-2" />
+                      Запросы
+                      {pendingRequestsCount > 0 && (
+                        <Badge 
+                          variant="destructive" 
+                          className="ml-auto h-5 min-w-5 flex items-center justify-center px-1.5 text-xs"
+                        >
+                          {pendingRequestsCount}
+                        </Badge>
+                      )}
+                    </Button>
+                  </div>
                 </DialogContent>
               </Dialog>
-            </div>
 
-            {/* Text buttons */}
-            <Button
-              variant="outline" 
-              className="w-full relative" 
-              onClick={() => {
-                setIsPublicChannelsOpen(true);
-                resetChannelUnread();
-              }}
-            >
-              <Radio className="w-4 h-4 mr-2" />
-              Публичные каналы
-              {channelUnreadCount > 0 && (
-                <Badge 
-                  variant="destructive" 
-                  className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
-                >
-                  {channelUnreadCount}
-                </Badge>
-              )}
-            </Button>
+              <Button
+                variant="outline" 
+                className="flex-1 relative" 
+                onClick={() => {
+                  setIsPublicChannelsOpen(true);
+                  resetChannelUnread();
+                }}
+              >
+                <Radio className="w-4 h-4 mr-2" />
+                Каналы
+                {channelUnreadCount > 0 && (
+                  <Badge 
+                    variant="destructive" 
+                    className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
+                  >
+                    {channelUnreadCount}
+                  </Badge>
+                )}
+              </Button>
+            </div>
           </div>
+
+          {/* Dialogs for New Chat and Requests */}
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Отправить запрос на чат</DialogTitle>
+              </DialogHeader>
+              <ContactSearch
+                onSelectContact={(profile) => sendChatRequest(profile.id)}
+                currentUserId={currentUserId}
+              />
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={isRequestsOpen} onOpenChange={setIsRequestsOpen}>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Запросы на чат</DialogTitle>
+              </DialogHeader>
+              <ChatRequests
+                currentUserId={currentUserId}
+                onRequestAccepted={(chatId) => {
+                  setIsRequestsOpen(false);
+                  setSelectedChatId(chatId);
+                }}
+              />
+            </DialogContent>
+          </Dialog>
 
           <div className="flex-1 overflow-hidden">
             <ChatList
