@@ -731,9 +731,11 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
                 iceCandidatesQueue.current.push(message.candidate);
               }
             } else if (message.type === "end-call") {
-              console.log('[AudioCall] Received end-call signal');
-              toast.info("Звонок завершен");
-              handleEndCall();
+              console.log('[AudioCall] Received end-call signal from peer');
+              toast.info("Звонок завершен собеседником");
+              // Вызываем cleanup напрямую, без отправки end-call обратно
+              cleanup();
+              onClose();
             }
           } catch (error) {
             console.error("[AudioCall] ✗ Error processing signaling message:", error);

@@ -807,8 +807,11 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
                 iceCandidatesQueue.current.push(message.candidate);
               }
             } else if (message.type === "end-call") {
-              console.log('[VideoCall] Received end-call signal');
-              handleEndCall();
+              console.log('[VideoCall] Received end-call signal from peer');
+              toast.info("Звонок завершен собеседником");
+              // Вызываем cleanup напрямую, без отправки end-call обратно
+              cleanup();
+              onClose();
             }
           } catch (error) {
             console.error("[VideoCall] ✗ Error processing signaling message:", error);
