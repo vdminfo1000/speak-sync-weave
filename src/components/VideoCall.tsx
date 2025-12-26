@@ -1089,10 +1089,15 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
 
   const cleanup = () => {
     console.log('[VideoCall] Cleaning up call resources');
+
+    if (disconnectTimeoutRef.current) {
+      clearTimeout(disconnectTimeoutRef.current);
+      disconnectTimeoutRef.current = null;
+    }
     
     // Отмечаем звонок как неактивный
     isCallActiveRef.current = false;
-    
+
     // Stop screen share stream first
     if (screenStreamRef.current) {
       screenStreamRef.current.getTracks().forEach((track) => {

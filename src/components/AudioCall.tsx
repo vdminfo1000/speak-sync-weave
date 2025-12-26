@@ -908,10 +908,15 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
 
   const cleanup = () => {
     console.log('[AudioCall] Cleaning up call resources');
+
+    if (disconnectTimeoutRef.current) {
+      clearTimeout(disconnectTimeoutRef.current);
+      disconnectTimeoutRef.current = null;
+    }
     
     // Отмечаем звонок как неактивный
     isCallActiveRef.current = false;
-    
+
     // Stop local tracks using ref (more reliable than state)
     const streamToClean = localStreamRef.current || localStream;
     if (streamToClean) {
