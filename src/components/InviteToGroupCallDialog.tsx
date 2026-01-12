@@ -28,8 +28,6 @@ const InviteToGroupCallDialog = ({
   isOpen,
   onClose,
   currentUserId,
-  roomId,
-  callType,
   onInvite,
 }: InviteToGroupCallDialogProps) => {
   const [contacts, setContacts] = useState<Profile[]>([]);
@@ -130,75 +128,13 @@ const InviteToGroupCallDialog = ({
 
   const handleInvite = async (contact: Profile) => {
     setInvitingId(contact.id);
-    
+
     try {
-      console.log("[InviteToGroupCall] Sending group call invitation to:", contact.id);
-      
-      // Получаем имя текущего пользователя
-      const { data: currentProfile } = await supabase
-        .from("profiles")
-        .select("full_name, username")
-        .eq("id", currentUserId)
-        .single();
-      
-      const callerName = currentProfile?.full_name || currentProfile?.username || "Неизвестный";
-      
-      // Отправляем уведомление о входящем групповом звонке
-      const channelName = `global-call-notifications-${contact.id}`;
-      console.log("[InviteToGroupCall] Subscribing to channel:", channelName);
-      
-      const channel = supabase.channel(channelName);
-      
-      // Дожидаемся полной подписки на канал
-      await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          reject(new Error("Subscription timeout"));
-        }, 5000);
-        
-        channel.subscribe((status) => {
-          console.log("[InviteToGroupCall] Channel subscription status:", status);
-          if (status === "SUBSCRIBED") {
-            clearTimeout(timeout);
-            resolve();
-          } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-            clearTimeout(timeout);
-            reject(new Error(`Channel subscription failed: ${status}`));
-          }
-        });
-      });
-      
-      console.log("[InviteToGroupCall] Channel subscribed, sending invitation...");
-      
-      // Небольшая задержка для синхронизации
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-      const result = await channel.send({
-        type: "broadcast",
-        event: "incoming-call",
-        payload: {
-          callerId: currentUserId,
-          callerName,
-          chatId: roomId,
-          callType,
-          isGroupCall: true,
-          roomId,
-        },
-      });
-      
-      console.log("[InviteToGroupCall] Invitation sent, result:", result);
-      
-      // Очищаем канал после отправки
-      setTimeout(() => {
-        supabase.removeChannel(channel);
-      }, 2000);
-      
-      // Вызываем onInvite для подготовки к подключению
-      onInvite(contact.id);
-      
-      toast.success(`Приглашение отправлено ${contact.full_name || contact.username}`);
+      console.log("[InviteToGroupCall] Selected contact to invite:", contact.id);
+      await Promise.resolve(onInvite(contact.id));
       onClose();
     } catch (error) {
-      console.error("[InviteToGroupCall] Error sending invitation:", error);
+      console.error("[InviteToGroupCall] Error inviting contact:", error);
       toast.error("Не удалось отправить приглашение");
     } finally {
       setInvitingId(null);

@@ -78,6 +78,9 @@ const GroupAudioCall = ({
       iceCandidatePoolSize: 10,
     };
 
+  // Детерминированный выбор инициатора для каждой пары (избегаем glare/двух offer одновременно)
+  const shouldInitiateConnection = (a: string, b: string) => a < b;
+
   // Обработчик для очистки при закрытии/навигации
   useEffect(() => {
     const handleBeforeUnload = () => {
@@ -177,7 +180,8 @@ const GroupAudioCall = ({
 
       for (const participant of participants) {
         if (participant.userId !== currentUserId) {
-          await createPeerConnection(participant.userId, true, stream);
+          const isInitiatorForPair = shouldInitiateConnection(currentUserId, participant.userId);
+          await createPeerConnection(participant.userId, isInitiatorForPair, stream);
         }
       }
 
@@ -204,19 +208,23 @@ const GroupAudioCall = ({
         console.log(`Received remote audio track from ${targetUserId}`);
       }
       const [remoteStream] = event.streams;
-      
+
       const audioElement = new Audio();
       audioElement.srcObject = remoteStream;
       audioElement.autoplay = true;
       audioRefs.current.set(targetUserId, audioElement);
-      
-      setParticipants(prev => 
-        prev.map(p => 
-          p.userId === targetUserId 
+
+      setParticipants(prev => {
+        const exists = prev.some(p => p.userId === targetUserId);
+        if (!exists) {
+          return [...prev, { userId: targetUserId, userName: "Участник", stream: remoteStream, peerConnection: pc }];
+        }
+        return prev.map(p =>
+          p.userId === targetUserId
             ? { ...p, stream: remoteStream, peerConnection: pc }
             : p
-        )
-      );
+        );
+      });
     };
 
     pc.onicecandidate = (event) => {
@@ -240,13 +248,17 @@ const GroupAudioCall = ({
       }
     };
 
-    setParticipants(prev => 
-      prev.map(p => 
-        p.userId === targetUserId 
+    setParticipants(prev => {
+      const exists = prev.some(p => p.userId === targetUserId);
+      if (!exists) {
+        return [...prev, { userId: targetUserId, userName: "Участник", peerConnection: pc }];
+      }
+      return prev.map(p =>
+        p.userId === targetUserId
           ? { ...p, peerConnection: pc }
           : p
-      )
-    );
+      );
+    });
 
     if (isInitiator) {
       const offer = await pc.createOffer({
@@ -322,7 +334,8 @@ const GroupAudioCall = ({
                 
                 if (currentStream) {
                   console.log("[GroupAudioCall] Creating peer connection to new user:", from);
-                  await createPeerConnection(from, true, currentStream);
+                  const isInitiatorForPair = shouldInitiateConnection(currentUserId, from);
+                  await createPeerConnection(from, isInitiatorForPair, currentStream);
                 } else {
                   console.error("[GroupAudioCall] No local stream available for peer connection");
                 }
@@ -338,6 +351,12 @@ const GroupAudioCall = ({
               }
               
               if (pc) {
+                // Glare-handling: если мы уже успели создать local offer, откатываем его
+                if (pc.signalingState === "have-local-offer") {
+                  console.warn("[GroupAudioCall] Glare detected, rolling back local offer before applying remote offer");
+                  await pc.setLocalDescription({ type: "rollback" } as any);
+                }
+
                 await pc.setRemoteDescription(new RTCSessionDescription(message.offer));
                 const answer = await pc.createAnswer();
                 await pc.setLocalDescription(answer);

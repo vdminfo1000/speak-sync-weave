@@ -791,33 +791,48 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
               console.log('[AudioCall] Received transition-to-group signal from peer:', message);
               
               // Другой участник инициировал переход к групповому звонку
-              const { roomId, initiatorId, initiatorName, newParticipantId, newParticipantName } = message;
-              
-              // Получаем имя текущего пользователя
-              const { data: currentProfile } = await supabase
-                .from("profiles")
-                .select("full_name, username")
-                .eq("id", currentUserId)
-                .single();
-              
-              const currentUserName = currentProfile?.full_name || currentProfile?.username || "Вы";
-              
-              // Завершаем текущий парный звонок
-              cleanup();
-              
-              // Переходим к групповому звонку
-              if (onTransitionToGroupCall) {
-                const participants = [
+              const { roomId } = message;
+
+              const participantsFromMessage = Array.isArray(message.participants)
+                ? (message.participants as Array<{ userId: string; userName: string }>)
+                : null;
+
+              let participants: Array<{ userId: string; userName: string }> = [];
+
+              if (participantsFromMessage) {
+                const map = new Map<string, { userId: string; userName: string }>();
+                for (const p of participantsFromMessage) {
+                  if (p?.userId) map.set(p.userId, { userId: p.userId, userName: p.userName || "Участник" });
+                }
+                participants = [...map.values()];
+              } else {
+                const { initiatorId, initiatorName, newParticipantId, newParticipantName } = message;
+
+                // Получаем имя текущего пользователя
+                const { data: currentProfile } = await supabase
+                  .from("profiles")
+                  .select("full_name, username")
+                  .eq("id", currentUserId)
+                  .single();
+
+                const currentUserName = currentProfile?.full_name || currentProfile?.username || "Вы";
+
+                participants = [
                   { userId: currentUserId, userName: currentUserName },
                   { userId: initiatorId, userName: initiatorName },
                   { userId: newParticipantId, userName: newParticipantName },
                 ];
-                
+              }
+
+              // Завершаем текущий парный звонок
+              cleanup();
+
+              // Переходим к групповому звонку
+              if (onTransitionToGroupCall) {
                 console.log('[AudioCall] Transitioning to group call as recipient:', participants);
                 toast.info("Переход к групповому звонку");
                 onTransitionToGroupCall(roomId, participants);
               } else {
-                // Если нет callback, просто закрываем звонок
                 onClose();
               }
             }
@@ -987,6 +1002,12 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
       
       // Используем chatId как roomId для группового звонка
       const roomId = chatId;
+
+      const participants = [
+        { userId: currentUserId, userName: currentUserName },
+        { userId: otherUserId, userName: otherUserName },
+        { userId: contactId, userName: newParticipantName },
+      ];
       
       // 1. Сначала отправляем сигнал текущему собеседнику о переходе в групповой звонок
       console.log('[AudioCall] Sending transition-to-group signal to current peer:', otherUserId);
@@ -998,6 +1019,7 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
         initiatorName: currentUserName,
         newParticipantId: contactId,
         newParticipantName,
+        participants,
       });
       
       // 2. Отправляем приглашение новому участнику
@@ -1028,6 +1050,7 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
           callType: "audio",
           isGroupCall: true,
           roomId,
+          participants,
         },
       });
       
@@ -1042,12 +1065,6 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
       
       // 4. Переход к групповому звонку через callback
       if (onTransitionToGroupCall) {
-        const participants = [
-          { userId: currentUserId, userName: currentUserName },
-          { userId: otherUserId, userName: otherUserName },
-          { userId: contactId, userName: newParticipantName },
-        ];
-        
         console.log('[AudioCall] Calling onTransitionToGroupCall with participants:', participants);
         onTransitionToGroupCall(roomId, participants);
       }

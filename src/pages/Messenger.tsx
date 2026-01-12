@@ -52,6 +52,7 @@ const Messenger = () => {
     callType: "audio" | "video";
     isGroupCall?: boolean;
     roomId?: string;
+    participants?: Array<{ userId: string; userName: string }>;
   } | null>(null);
   const [activeCall, setActiveCall] = useState<{
     chatId: string;
@@ -219,8 +220,13 @@ const Messenger = () => {
             callType: payload.payload.callType,
             isGroupCall: payload.payload.isGroupCall,
             roomId: payload.payload.roomId,
+            participants: payload.payload.participants,
           });
-          
+
+          const participants = Array.isArray(payload.payload.participants)
+            ? (payload.payload.participants as Array<{ userId: string; userName: string }>)
+            : undefined;
+
           setIncomingCall({
             chatId: payload.payload.chatId,
             callerName,
@@ -228,6 +234,7 @@ const Messenger = () => {
             callType: payload.payload.callType,
             isGroupCall: payload.payload.isGroupCall || false,
             roomId: payload.payload.roomId,
+            participants,
           });
         }
       )
@@ -289,13 +296,26 @@ const Messenger = () => {
       
       const currentUserName = currentProfile?.full_name || currentProfile?.username || "Вы";
       
+      // Нормализуем список участников: используем переданный roster (если есть),
+      // но гарантируем, что текущий пользователь присутствует в списке.
+      const roster = incomingCall.participants && incomingCall.participants.length
+        ? incomingCall.participants
+        : [
+            { userId: currentUserId, userName: currentUserName },
+            { userId: incomingCall.callerId, userName: incomingCall.callerName },
+          ];
+
+      const map = new Map<string, { userId: string; userName: string }>();
+      for (const p of roster) {
+        if (!p?.userId) continue;
+        map.set(p.userId, { userId: p.userId, userName: p.userName || "Участник" });
+      }
+      map.set(currentUserId, { userId: currentUserId, userName: currentUserName });
+
       setActiveGroupCall({
         roomId: incomingCall.roomId,
         callType: incomingCall.callType,
-        participants: [
-          { userId: currentUserId, userName: currentUserName },
-          { userId: incomingCall.callerId, userName: incomingCall.callerName },
-        ],
+        participants: [...map.values()],
       });
       setIncomingCall(null);
       return;
