@@ -365,6 +365,20 @@ const Messenger = () => {
     setActiveCall(null);
   };
 
+  const handleTransitionToGroupCall = (roomId: string, callType: "audio" | "video", participants: Array<{ userId: string; userName: string }>) => {
+    console.log('[Messenger] handleTransitionToGroupCall:', { roomId, callType, participants });
+    
+    // Закрываем текущий парный звонок
+    setActiveCall(null);
+    
+    // Устанавливаем групповой звонок
+    setActiveGroupCall({
+      roomId,
+      callType,
+      participants,
+    });
+  };
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     navigate("/auth");
@@ -698,7 +712,11 @@ const Messenger = () => {
           chatId={activeCall.chatId}
           currentUserId={currentUserId}
           otherUserId={activeCall.otherUserId}
+          otherUserName={activeCall.otherUserName}
           isInitiator={activeCall.isInitiator}
+          onTransitionToGroupCall={(roomId, participants) => 
+            handleTransitionToGroupCall(roomId, "video", participants)
+          }
         />
       )}
       
@@ -711,6 +729,9 @@ const Messenger = () => {
           otherUserId={activeCall.otherUserId}
           otherUserName={activeCall.otherUserName}
           isInitiator={activeCall.isInitiator}
+          onTransitionToGroupCall={(roomId, participants) => 
+            handleTransitionToGroupCall(roomId, "audio", participants)
+          }
         />
       )}
 
