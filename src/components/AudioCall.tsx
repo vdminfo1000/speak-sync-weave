@@ -17,9 +17,10 @@ interface AudioCallProps {
   otherUserId: string;
   otherUserName: string;
   isInitiator: boolean;
+  onTransitionToGroupCall?: (roomId: string, participants: Array<{ userId: string; userName: string }>) => void;
 }
 
-const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherUserName, isInitiator }: AudioCallProps) => {
+const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherUserName, isInitiator, onTransitionToGroupCall }: AudioCallProps) => {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [peerConnection, setPeerConnection] = useState<RTCPeerConnection | null>(null);
   const [isMuted, setIsMuted] = useState(false);
@@ -786,6 +787,39 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
               // Вызываем cleanup напрямую, без отправки end-call обратно
               cleanup();
               onClose();
+            } else if (message.type === "transition-to-group") {
+              console.log('[AudioCall] Received transition-to-group signal from peer:', message);
+              
+              // Другой участник инициировал переход к групповому звонку
+              const { roomId, initiatorId, initiatorName, newParticipantId, newParticipantName } = message;
+              
+              // Получаем имя текущего пользователя
+              const { data: currentProfile } = await supabase
+                .from("profiles")
+                .select("full_name, username")
+                .eq("id", currentUserId)
+                .single();
+              
+              const currentUserName = currentProfile?.full_name || currentProfile?.username || "Вы";
+              
+              // Завершаем текущий парный звонок
+              cleanup();
+              
+              // Переходим к групповому звонку
+              if (onTransitionToGroupCall) {
+                const participants = [
+                  { userId: currentUserId, userName: currentUserName },
+                  { userId: initiatorId, userName: initiatorName },
+                  { userId: newParticipantId, userName: newParticipantName },
+                ];
+                
+                console.log('[AudioCall] Transitioning to group call as recipient:', participants);
+                toast.info("Переход к групповому звонку");
+                onTransitionToGroupCall(roomId, participants);
+              } else {
+                // Если нет callback, просто закрываем звонок
+                onClose();
+              }
             }
           } catch (error) {
             console.error("[AudioCall] ✗ Error processing signaling message:", error);
@@ -931,23 +965,94 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
 
   const handleInviteToGroup = async (contactId: string) => {
     try {
-      // Отправляем приглашение в групповой звонок
-      const channel = supabase.channel(`global-call-notifications-${contactId}`);
-      await channel.subscribe();
+      console.log('[AudioCall] Transitioning to group call with new participant:', contactId);
       
-      await channel.send({
+      // Получаем имя текущего пользователя
+      const { data: currentProfile } = await supabase
+        .from("profiles")
+        .select("full_name, username")
+        .eq("id", currentUserId)
+        .single();
+      
+      const currentUserName = currentProfile?.full_name || currentProfile?.username || "Вы";
+      
+      // Получаем имя нового участника
+      const { data: newParticipantProfile } = await supabase
+        .from("profiles")
+        .select("full_name, username")
+        .eq("id", contactId)
+        .single();
+      
+      const newParticipantName = newParticipantProfile?.full_name || newParticipantProfile?.username || "Участник";
+      
+      // Используем chatId как roomId для группового звонка
+      const roomId = chatId;
+      
+      // 1. Сначала отправляем сигнал текущему собеседнику о переходе в групповой звонок
+      console.log('[AudioCall] Sending transition-to-group signal to current peer:', otherUserId);
+      await sendSignalingMessage({
+        type: "transition-to-group",
+        roomId,
+        callType: "audio",
+        initiatorId: currentUserId,
+        initiatorName: currentUserName,
+        newParticipantId: contactId,
+        newParticipantName,
+      });
+      
+      // 2. Отправляем приглашение новому участнику
+      const inviteChannel = supabase.channel(`global-call-notifications-${contactId}`);
+      
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error("Subscription timeout")), 5000);
+        inviteChannel.subscribe((status) => {
+          if (status === "SUBSCRIBED") {
+            clearTimeout(timeout);
+            resolve();
+          } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+            clearTimeout(timeout);
+            reject(new Error(`Channel subscription failed: ${status}`));
+          }
+        });
+      });
+      
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      await inviteChannel.send({
         type: "broadcast",
-        event: "incoming-group-call",
+        event: "incoming-call",
         payload: {
-          chatId: chatId,
           callerId: currentUserId,
+          callerName: currentUserName,
+          chatId: roomId,
           callType: "audio",
-          isGroupInvite: true,
+          isGroupCall: true,
+          roomId,
         },
       });
       
-      await supabase.removeChannel(channel);
-      toast.success("Приглашение отправлено");
+      console.log('[AudioCall] Invitation sent to new participant');
+      
+      setTimeout(() => {
+        supabase.removeChannel(inviteChannel);
+      }, 2000);
+      
+      // 3. Завершаем текущий парный звонок и переходим к групповому
+      cleanup();
+      
+      // 4. Переход к групповому звонку через callback
+      if (onTransitionToGroupCall) {
+        const participants = [
+          { userId: currentUserId, userName: currentUserName },
+          { userId: otherUserId, userName: otherUserName },
+          { userId: contactId, userName: newParticipantName },
+        ];
+        
+        console.log('[AudioCall] Calling onTransitionToGroupCall with participants:', participants);
+        onTransitionToGroupCall(roomId, participants);
+      }
+      
+      toast.success(`Приглашение отправлено ${newParticipantName}`);
     } catch (error) {
       if (import.meta.env.DEV) {
         console.error("Error inviting to group call:", error);
