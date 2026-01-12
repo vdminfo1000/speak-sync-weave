@@ -88,6 +88,9 @@ const GroupVideoCall = ({
       iceCandidatePoolSize: 10,
     };
 
+  // Детерминированный выбор инициатора для каждой пары (избегаем glare/двух offer одновременно)
+  const shouldInitiateConnection = (a: string, b: string) => a < b;
+
   // Обработчик для очистки при закрытии/навигации
   useEffect(() => {
     const handleBeforeUnload = () => {
@@ -200,10 +203,11 @@ const GroupVideoCall = ({
         userId: currentUserId,
       }, null);
 
-      // Создаем connections к существующим участникам
+      // Создаем connections к существующим участникам (инициатор выбирается детерминированно для каждой пары)
       for (const participant of participants) {
         if (participant.userId !== currentUserId) {
-          await createPeerConnection(participant.userId, true, stream);
+          const isInitiatorForPair = shouldInitiateConnection(currentUserId, participant.userId);
+          await createPeerConnection(participant.userId, isInitiatorForPair, stream);
         }
       }
 
@@ -232,14 +236,18 @@ const GroupVideoCall = ({
         console.log(`Received remote track from ${targetUserId}`);
       }
       const [remoteStream] = event.streams;
-      
-      setParticipants(prev => 
-        prev.map(p => 
-          p.userId === targetUserId 
+
+      setParticipants(prev => {
+        const exists = prev.some(p => p.userId === targetUserId);
+        if (!exists) {
+          return [...prev, { userId: targetUserId, userName: "Участник", stream: remoteStream, peerConnection: pc }];
+        }
+        return prev.map(p =>
+          p.userId === targetUserId
             ? { ...p, stream: remoteStream, peerConnection: pc }
             : p
-        )
-      );
+        );
+      });
     };
 
     // Обрабатываем ICE candidates с улучшенной обработкой ошибок
@@ -290,14 +298,18 @@ const GroupVideoCall = ({
       }
     };
 
-    // Обновляем состояние участников
-    setParticipants(prev => 
-      prev.map(p => 
-        p.userId === targetUserId 
+    // Обновляем состояние участников (upsert, чтобы не потерять pc если участник добавился "в гонке")
+    setParticipants(prev => {
+      const exists = prev.some(p => p.userId === targetUserId);
+      if (!exists) {
+        return [...prev, { userId: targetUserId, userName: "Участник", peerConnection: pc }];
+      }
+      return prev.map(p =>
+        p.userId === targetUserId
           ? { ...p, peerConnection: pc }
           : p
-      )
-    );
+      );
+    });
 
     // Если мы инициатор, создаем offer
     if (isInitiator) {
@@ -374,10 +386,11 @@ const GroupVideoCall = ({
                 console.log("[GroupVideoCall] New user joined:", from);
                 setParticipants(prev => [...prev, { userId: from, userName: "Участник" }]);
                 
-                // Создаем connection к новому участнику (мы инициатор)
+                // Создаем connection к новому участнику (инициатор выбирается детерминированно)
                 if (currentStream) {
                   console.log("[GroupVideoCall] Creating peer connection to new user:", from);
-                  await createPeerConnection(from, true, currentStream);
+                  const isInitiatorForPair = shouldInitiateConnection(currentUserId, from);
+                  await createPeerConnection(from, isInitiatorForPair, currentStream);
                 } else {
                   console.error("[GroupVideoCall] No local stream available for peer connection");
                 }
@@ -393,6 +406,12 @@ const GroupVideoCall = ({
               }
               
               if (pc) {
+                // Glare-handling: если мы уже успели создать local offer, откатываем его
+                if (pc.signalingState === "have-local-offer") {
+                  console.warn("[GroupVideoCall] Glare detected, rolling back local offer before applying remote offer");
+                  await pc.setLocalDescription({ type: "rollback" } as any);
+                }
+
                 await pc.setRemoteDescription(new RTCSessionDescription(message.offer));
                 const answer = await pc.createAnswer();
                 await pc.setLocalDescription(answer);
