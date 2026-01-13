@@ -28,6 +28,7 @@ const InviteToGroupCallDialog = ({
   isOpen,
   onClose,
   currentUserId,
+  callType,
   onInvite,
 }: InviteToGroupCallDialogProps) => {
   const [contacts, setContacts] = useState<Profile[]>([]);
