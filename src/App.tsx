@@ -18,6 +18,7 @@ import DigitalID from "./pages/DigitalID";
 import IntegrationsPage from "./pages/IntegrationsPage";
 import Travel from "./pages/Travel";
 import Help from "./pages/Help";
+import VirtualEnvironment from "./pages/VirtualEnvironment";
 
 const queryClient = new QueryClient();
 
@@ -42,6 +43,7 @@ const App = () => (
           <Route path="/integrations" element={<IntegrationsPage />} />
           <Route path="/travel" element={<Travel />} />
           <Route path="/help" element={<Help />} />
+          <Route path="/virtual-environment" element={<VirtualEnvironment />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

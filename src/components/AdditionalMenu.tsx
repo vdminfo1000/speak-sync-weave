@@ -6,7 +6,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { Menu, Briefcase, Wallet, Fingerprint, Plane, HelpCircle, Settings, Users } from "lucide-react";
+import { Menu, Briefcase, Wallet, Fingerprint, Plane, HelpCircle, Settings, Gamepad2 } from "lucide-react";
 
 const AdditionalMenu = () => {
   const navigate = useNavigate();
@@ -19,9 +19,9 @@ const AdditionalMenu = () => {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuItem onClick={() => navigate("/social-network")}>
-          <Users className="w-4 h-4 mr-2" />
-          Социальная сеть
+        <DropdownMenuItem onClick={() => navigate("/virtual-environment")}>
+          <Gamepad2 className="w-4 h-4 mr-2" />
+          Виртуальная среда
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => navigate("/business-environment")}>
           <Briefcase className="w-4 h-4 mr-2" />
