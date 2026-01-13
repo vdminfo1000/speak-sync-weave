@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      biometric_credentials: {
+        Row: {
+          created_at: string
+          credential_id: string
+          credential_type: string
+          device_name: string | null
+          id: string
+          is_active: boolean
+          last_used_at: string | null
+          public_key: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          credential_id: string
+          credential_type: string
+          device_name?: string | null
+          id?: string
+          is_active?: boolean
+          last_used_at?: string | null
+          public_key: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          credential_id?: string
+          credential_type?: string
+          device_name?: string | null
+          id?: string
+          is_active?: boolean
+          last_used_at?: string | null
+          public_key?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       call_history: {
         Row: {
           call_type: string
@@ -201,6 +237,69 @@ export type Database = {
           is_public?: boolean | null
           name?: string | null
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      coin_transactions: {
+        Row: {
+          amount: number
+          created_at: string
+          description: string | null
+          id: string
+          receiver_id: string
+          sender_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          description?: string | null
+          id?: string
+          receiver_id: string
+          sender_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          description?: string | null
+          id?: string
+          receiver_id?: string
+          sender_id?: string
+        }
+        Relationships: []
+      }
+      digital_certificates: {
+        Row: {
+          certificate_data: string
+          certificate_name: string
+          created_at: string
+          id: string
+          is_active: boolean
+          issuer: string | null
+          user_id: string
+          valid_from: string
+          valid_until: string
+        }
+        Insert: {
+          certificate_data: string
+          certificate_name: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          issuer?: string | null
+          user_id: string
+          valid_from: string
+          valid_until: string
+        }
+        Update: {
+          certificate_data?: string
+          certificate_name?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          issuer?: string | null
+          user_id?: string
+          valid_from?: string
+          valid_until?: string
         }
         Relationships: []
       }
@@ -816,6 +915,56 @@ export type Database = {
         }
         Relationships: []
       }
+      user_documents: {
+        Row: {
+          created_at: string
+          document_name: string
+          document_size: number | null
+          document_type: string | null
+          document_url: string
+          id: string
+          is_signed: boolean
+          signature_hash: string | null
+          signed_at: string | null
+          signed_by_certificate_id: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          document_name: string
+          document_size?: number | null
+          document_type?: string | null
+          document_url: string
+          id?: string
+          is_signed?: boolean
+          signature_hash?: string | null
+          signed_at?: string | null
+          signed_by_certificate_id?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          document_name?: string
+          document_size?: number | null
+          document_type?: string | null
+          document_url?: string
+          id?: string
+          is_signed?: boolean
+          signature_hash?: string | null
+          signed_at?: string | null
+          signed_by_certificate_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_documents_signed_by_certificate_id_fkey"
+            columns: ["signed_by_certificate_id"]
+            isOneToOne: false
+            referencedRelation: "digital_certificates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_ringtones: {
         Row: {
           contact_id: string | null
@@ -842,6 +991,30 @@ export type Database = {
           is_default?: boolean | null
           ringtone_name?: string | null
           ringtone_url?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_wallets: {
+        Row: {
+          balance: number
+          created_at: string
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          balance?: number
+          created_at?: string
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          balance?: number
+          created_at?: string
+          id?: string
+          updated_at?: string
           user_id?: string
         }
         Relationships: []
@@ -877,6 +1050,14 @@ export type Database = {
           status: string
           username: string
         }[]
+      }
+      transfer_coins: {
+        Args: {
+          p_amount: number
+          p_description?: string
+          p_receiver_id: string
+        }
+        Returns: string
       }
       user_is_member_of_chat: { Args: { p_chat_id: string }; Returns: boolean }
       users_share_chat: {
