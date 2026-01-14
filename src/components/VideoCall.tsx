@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Phone, PhoneOff, Mic, MicOff, Video as VideoIcon, VideoOff, Minimize2, Maximize2, UserPlus } from "lucide-react";
+import { Phone, PhoneOff, Mic, MicOff, Video as VideoIcon, VideoOff, Minimize2, Maximize2, UserPlus, Move } from "lucide-react";
 import { toast } from "sonner";
 import InviteToGroupCallDialog from "./InviteToGroupCallDialog";
 import { useCallHistory } from "@/hooks/useCallHistory";
@@ -38,6 +38,11 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
     audioQuality: string;
   }>({ ping: 0, packetLoss: 0, videoQuality: 'good', audioQuality: 'good' });
 
+  // PiP (Picture-in-Picture) position state
+  const [pipPosition, setPipPosition] = useState({ x: 16, y: 16 });
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartRef = useRef({ x: 0, y: 0, pipX: 0, pipY: 0 });
+
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const channelRef = useRef<any>(null);
@@ -55,6 +60,7 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
   const maxReconnectAttempts = 3;
   const callInitStartedAtRef = useRef<number>(0);
   const disconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const pipContainerRef = useRef<HTMLDivElement>(null);
 
   const { recordCall, updateCallStatus } = useCallHistory(currentUserId);
 
@@ -66,7 +72,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
         { urls: "stun:stun3.l.google.com:19302" },
         { urls: "stun:stun4.l.google.com:19302" },
         { urls: "stun:global.stun.twilio.com:3478" },
-        // ✅ ДОБАВЬТЕ TURN сервер:
         {
           urls: [
             'turn:web.goodok.org:3478',
@@ -84,6 +89,67 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
 
   // Ref для отслеживания активного состояния звонка (для Safari iOS)
   const isCallActiveRef = useRef(false);
+
+  // PiP drag handlers
+  const handleDragStart = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+    
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    
+    dragStartRef.current = {
+      x: clientX,
+      y: clientY,
+      pipX: pipPosition.x,
+      pipY: pipPosition.y
+    };
+  }, [pipPosition]);
+
+  const handleDragMove = useCallback((e: MouseEvent | TouchEvent) => {
+    if (!isDragging) return;
+    
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    
+    const deltaX = clientX - dragStartRef.current.x;
+    const deltaY = clientY - dragStartRef.current.y;
+    
+    const container = pipContainerRef.current?.parentElement;
+    if (!container) return;
+    
+    const containerRect = container.getBoundingClientRect();
+    const pipRect = pipContainerRef.current?.getBoundingClientRect();
+    if (!pipRect) return;
+    
+    const maxX = containerRect.width - pipRect.width - 16;
+    const maxY = containerRect.height - pipRect.height - 16;
+    
+    const newX = Math.max(16, Math.min(maxX, dragStartRef.current.pipX + deltaX));
+    const newY = Math.max(16, Math.min(maxY, dragStartRef.current.pipY + deltaY));
+    
+    setPipPosition({ x: newX, y: newY });
+  }, [isDragging]);
+
+  const handleDragEnd = useCallback(() => {
+    setIsDragging(false);
+  }, []);
+
+  useEffect(() => {
+    if (isDragging) {
+      document.addEventListener('mousemove', handleDragMove);
+      document.addEventListener('mouseup', handleDragEnd);
+      document.addEventListener('touchmove', handleDragMove);
+      document.addEventListener('touchend', handleDragEnd);
+      
+      return () => {
+        document.removeEventListener('mousemove', handleDragMove);
+        document.removeEventListener('mouseup', handleDragEnd);
+        document.removeEventListener('touchmove', handleDragMove);
+        document.removeEventListener('touchend', handleDragEnd);
+      };
+    }
+  }, [isDragging, handleDragMove, handleDragEnd]);
 
   // Обработчик visibility change для сохранения соединения при сворачивании
   useEffect(() => {
@@ -136,12 +202,9 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
     };
 
     // Обработчик для закрытия страницы / навигации
-    // ВАЖНО: В Safari iOS pagehide может срабатывать при переключении между приложениями
-    // Поэтому НЕ вызываем cleanup если звонок активен
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       console.log('[VideoCall] Page unloading, isCallActive:', isCallActiveRef.current);
       
-      // Safari iOS: не очищаем ресурсы при pagehide если звонок активен
       const isSafariIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) && 
                           /WebKit/.test(navigator.userAgent) && 
                           !/CriOS|FxiOS|OPiOS|mercury/.test(navigator.userAgent);
@@ -151,7 +214,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
         return;
       }
       
-      // Останавливаем все стримы синхронно только при реальном закрытии страницы
       if (screenStreamRef.current) {
         screenStreamRef.current.getTracks().forEach(track => track.stop());
       }
@@ -169,8 +231,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
     const handlePageHide = (e: PageTransitionEvent) => {
       console.log('[VideoCall] Page hide event, persisted:', e.persisted, 'isCallActive:', isCallActiveRef.current);
       
-      // Safari iOS: e.persisted = true означает, что страница может быть восстановлена
-      // В этом случае НЕ очищаем ресурсы
       const isSafariIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) && 
                           /WebKit/.test(navigator.userAgent) && 
                           !/CriOS|FxiOS|OPiOS|mercury/.test(navigator.userAgent);
@@ -181,7 +241,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
       }
       
       if (!e.persisted) {
-        // Manually handle cleanup without calling handleBeforeUnload
         if (screenStreamRef.current) {
           screenStreamRef.current.getTracks().forEach(track => track.stop());
         }
@@ -281,7 +340,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
   useEffect(() => {
     console.log('[VideoCall] isMinimized changed:', isMinimized);
     
-    // Восстанавливаем потоки для обоих режимов с небольшой задержкой
     const restoreTimeout = setTimeout(() => {
       if (localVideoRef.current && localStreamRef.current) {
         console.log('[VideoCall] Restoring local stream to video element');
@@ -311,7 +369,7 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
           toast.error("Вызов не отвечен");
           handleEndCall();
         }
-      }, 45000); // 45 секунд
+      }, 45000);
     }
 
     return () => {
@@ -330,7 +388,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
 
   const initializeCall = async () => {
     try {
-      // Отмечаем звонок как активный для Safari iOS
       isCallActiveRef.current = true;
       callInitStartedAtRef.current = Date.now();
       
@@ -343,11 +400,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
         ts: new Date().toISOString(),
       });
       
-      if (import.meta.env.DEV) {
-        console.log("Initializing call, requesting media access...");
-      }
-      
-      // Адаптивные настройки для разных устройств
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
       
       const constraints = {
@@ -369,35 +421,26 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
       try {
         stream = await navigator.mediaDevices.getUserMedia(constraints);
       } catch (err) {
-        // Fallback для устройств с ограниченными возможностями
-        if (import.meta.env.DEV) {
-          console.warn("Failed with ideal constraints, trying basic media");
-        }
+        console.warn("Failed with ideal constraints, trying basic media");
         stream = await navigator.mediaDevices.getUserMedia({ 
           video: true, 
           audio: true 
         });
       }
       
-      if (import.meta.env.DEV) {
-        console.log("Media access granted, got stream:", stream.id);
-      }
+      console.log("Media access granted, got stream:", stream.id);
       setLocalStream(stream);
       localStreamRef.current = stream;
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
       }
 
-      // Создаем peer connection
       const pc = new RTCPeerConnection(configuration);
       setPeerConnection(pc);
       peerConnectionRef.current = pc;
       originalStreamRef.current = stream;
-      if (import.meta.env.DEV) {
-        console.log("PeerConnection created");
-      }
+      console.log("PeerConnection created");
 
-      // Добавляем локальные треки с настройками для лучшего качества
       stream.getTracks().forEach((track) => {
         console.log(`[VideoCall] Adding local ${track.kind} track:`, {
           id: track.id,
@@ -409,13 +452,12 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
         const sender = pc.addTrack(track, stream);
         console.log(`[VideoCall] Track ${track.kind} added to peer connection`);
         
-        // Настраиваем параметры отправки для видео
         if (track.kind === 'video') {
           const params = sender.getParameters();
           if (!params.encodings) {
             params.encodings = [{}];
           }
-          params.encodings[0].maxBitrate = 2000000; // 2 Mbps
+          params.encodings[0].maxBitrate = 2000000;
           params.encodings[0].maxFramerate = 30;
           sender.setParameters(params).then(() => {
             console.log('[VideoCall] Video encoding parameters set successfully');
@@ -425,7 +467,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
         }
       });
 
-      // Обрабатываем входящие треки
       pc.ontrack = (event) => {
         console.log(`[VideoCall] Received remote ${event.track.kind} track:`, {
           trackId: event.track.id,
@@ -444,7 +485,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
           return;
         }
         
-        // Проверяем, что трек активен
         if (event.track.readyState !== 'live') {
           console.warn('[VideoCall] Track is not live:', event.track.readyState);
         }
@@ -456,7 +496,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
           remoteVideoRef.current.srcObject = stream;
           remoteVideoRef.current.volume = 1.0;
           
-          // Принудительно воспроизводим видео с обработкой ошибок
           const playPromise = remoteVideoRef.current.play();
           if (playPromise !== undefined) {
             playPromise
@@ -465,7 +504,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
               })
               .catch(err => {
                 console.error('[VideoCall] Failed to play remote video:', err);
-                // Пробуем еще раз через небольшую задержку
                 setTimeout(() => {
                   if (remoteVideoRef.current) {
                     remoteVideoRef.current.play().catch(e => 
@@ -480,7 +518,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
         }
       };
 
-      // Обрабатываем ICE кандидаты с гарантированной доставкой и очередью
       pc.onicecandidate = (event) => {
         if (event.candidate) {
           console.log('[VideoCall] New ICE candidate:', {
@@ -491,7 +528,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
             priority: event.candidate.priority
           });
           
-          // Проверяем, установлен ли remote description
           if (!pc.remoteDescription) {
             console.log('[VideoCall] ⚠ Queueing ICE candidate (no remote description yet)');
             iceCandidatesQueue.current.push(event.candidate.toJSON());
@@ -508,7 +544,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
         }
       };
 
-      // Состояние ICE соединения с автоматическим переподключением
       pc.oniceconnectionstatechange = async () => {
         console.log('[VideoCall] ICE connection state changed:', {
           state: pc.iceConnectionState,
@@ -521,7 +556,7 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
         if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
           if (callStatus !== "connected") {
             console.log('[VideoCall] ✓ Call successfully connected!');
-            reconnectAttempts.current = 0; // Reset reconnect counter
+            reconnectAttempts.current = 0;
             setCallStatus("connected");
             toast.success("Звонок подключен");
             if (isInitiator) {
@@ -537,7 +572,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
 
           const sinceInitMs = Date.now() - (callInitStartedAtRef.current || Date.now());
           if (safariIOS && callStatus === 'connecting' && sinceInitMs < 8000) {
-            // iOS Safari может кратковременно отдавать failed на старте — даём время и не завершаем звонок
             console.warn('[VideoCall] Safari iOS: ignoring early ICE failed', { sinceInitMs });
             try {
               pc.restartIce?.();
@@ -547,7 +581,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
             return;
           }
           
-          // Пытаемся переподключиться
           if (reconnectAttempts.current < maxReconnectAttempts) {
             reconnectAttempts.current++;
             console.log(`[VideoCall] Attempting reconnect ${reconnectAttempts.current}/${maxReconnectAttempts}`);
@@ -557,7 +590,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
               if (pc.restartIce) {
                 pc.restartIce();
               } else {
-                // Fallback: создаем новый offer
                 if (isInitiator) {
                   const offer = await pc.createOffer({ iceRestart: true });
                   await pc.setLocalDescription(offer);
@@ -580,7 +612,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
         }
       };
 
-      // Устанавливаем таймаут для ICE gathering (10 секунд максимум)
       const iceGatheringTimeout = setTimeout(() => {
         if (pc.iceGatheringState === 'gathering') {
           console.warn('[VideoCall] ⚠ ICE gathering timeout after 10 seconds, proceeding anyway');
@@ -595,7 +626,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
         }
       };
 
-      // Мониторинг общего состояния соединения
       pc.onconnectionstatechange = () => {
         console.log('[VideoCall] Connection state changed:', {
           state: pc.connectionState,
@@ -606,7 +636,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
         
         if (pc.connectionState === 'connected') {
           console.log('[VideoCall] ✓ Peer connection fully established');
-          // Начинаем мониторинг качества связи
           startQualityMonitoring(pc);
         } else if (pc.connectionState === 'failed') {
           console.error('[VideoCall] ✗ Peer connection failed');
@@ -616,10 +645,8 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
         }
       };
 
-      // Подписываемся на сообщения сигнализации ПЕРЕД созданием offer
       await subscribeToSignaling(pc);
 
-      // Если мы инициатор звонка, создаем offer немедленно (Trickle ICE)
       if (isInitiator) {
         console.log('[VideoCall] Creating offer as initiator (Trickle ICE)');
         
@@ -632,14 +659,12 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
         await pc.setLocalDescription(offer);
         console.log('[VideoCall] Local description set, ICE gathering state:', pc.iceGatheringState);
         
-        // Отправляем offer немедленно, не дожидаясь всех ICE-кандидатов
         await sendSignalingMessage({
           type: "offer",
           offer: offer,
         });
         console.log('[VideoCall] Offer sent immediately to peer');
         
-        // Повторяем offer каждые 3 секунды пока не получим answer или не подключимся
         const offerRetryInterval = setInterval(async () => {
           if (pc.signalingState === 'have-local-offer' && callStatus === 'connecting') {
             console.log('[VideoCall] Retrying offer (no answer received yet)');
@@ -652,10 +677,8 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
           }
         }, 3000);
         
-        // Очищаем интервал при закрытии
         setTimeout(() => clearInterval(offerRetryInterval), 30000);
       } else {
-        // Получатель отправляет "ready" чтобы инициатор знал что можно отправлять offer
         console.log('[VideoCall] Sending ready signal as receiver');
         await sendSignalingMessage({ type: "ready" });
       }
@@ -665,12 +688,9 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
       isCallActiveRef.current = false;
       setCallStatus("ended");
       toast.error("Не удалось получить доступ к камере/микрофону");
-      // ВАЖНО: не закрываем окно автоматически (особенно на iOS Safari).
-      // Пользователь сможет разрешить доступ и повторить попытку или завершить звонок вручную.
     }
   };
 
-  // Специальная функция для отправки end-call с keepalive (работает в Safari)
   const sendEndCallSignal = () => {
     console.log('[VideoCall] Sending end-call with keepalive for Safari compatibility');
     
@@ -698,8 +718,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
         callType: 'video'
       });
 
-      // Используем fetch с keepalive: true - это гарантирует доставку в Safari
-      // даже если страница закрывается или компонент размонтируется
       fetch('https://gfbssmplzvfubdidprom.supabase.co/functions/v1/relay-signaling', {
         method: 'POST',
         headers: {
@@ -708,7 +726,7 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
           'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdmYnNzbXBsenZmdWJkaWRwcm9tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMwMzI4MTAsImV4cCI6MjA3ODYwODgxMH0.abI9fBl_dnHTKhHLPxh1kpDBU1ES_JT_dhv-502hHZo'
         },
         body,
-        keepalive: true // Критично для Safari - запрос завершится даже при закрытии страницы
+        keepalive: true
       }).then(res => {
         console.log('[VideoCall] End-call signal sent, status:', res.status);
       }).catch(err => {
@@ -727,14 +745,12 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
         chatId
       });
       
-      // Get auth session for secure relay
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
         console.error("[VideoCall] No active session for signaling");
         return;
       }
 
-      // Send through secure edge function relay
       const { data, error } = await supabase.functions.invoke('relay-signaling', {
         body: {
           to: otherUserId,
@@ -775,7 +791,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
             timestamp: new Date().toISOString()
           });
           
-          // Строгая фильтрация: сообщение должно быть ОТ другого пользователя И ДЛЯ нас
           if (payload.from === currentUserId) {
             console.log('[VideoCall] Ignoring our own message');
             return;
@@ -788,7 +803,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
 
           const { message, from } = payload;
           
-          // Verify message is from expected peer
           if (from !== otherUserId) {
             console.warn('[VideoCall] Message from unexpected peer:', from, 'expected:', otherUserId);
             return;
@@ -796,7 +810,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
 
           try {
             if (message.type === "ready") {
-              // Получатель готов, отправляем offer повторно
               console.log('[VideoCall] 📨 Receiver is ready, re-sending offer');
               if (isInitiator && pc.localDescription) {
                 await sendSignalingMessage({
@@ -808,7 +821,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
             } else if (message.type === "offer") {
               console.log('[VideoCall] 📨 Received offer from peer at', new Date().toISOString());
               
-              // Проверяем состояние - если уже есть remote description, пропускаем
               if (pc.signalingState === 'stable' && pc.remoteDescription) {
                 console.log('[VideoCall] ⚠ Already have remote description, ignoring duplicate offer');
                 return;
@@ -817,7 +829,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
               await pc.setRemoteDescription(new RTCSessionDescription(message.offer));
               console.log('[VideoCall] ✓ Remote description set (offer)');
               
-              // Обрабатываем очередь ICE candidates после установки remote description
               await processQueuedIceCandidates(pc);
               
               const answer = await pc.createAnswer();
@@ -839,73 +850,47 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
                 await pc.setRemoteDescription(new RTCSessionDescription(message.answer));
                 console.log('[VideoCall] ✓ Remote description set (answer)');
                 
-                // Обрабатываем очередь ICE candidates после установки remote description
                 await processQueuedIceCandidates(pc);
               } else {
                 console.warn('[VideoCall] ⚠ Cannot set answer - invalid signaling state:', pc.signalingState);
               }
-            } else if (message.type === "ice-candidate" && message.candidate) {
-              console.log('[VideoCall] Received ICE candidate');
+            } else if (message.type === "ice-candidate") {
+              console.log('[VideoCall] 📨 Received ICE candidate');
               
               if (pc.remoteDescription) {
                 try {
                   await pc.addIceCandidate(new RTCIceCandidate(message.candidate));
-                  console.log('[VideoCall] ✓ ICE candidate added successfully');
+                  console.log('[VideoCall] ✓ ICE candidate added');
                 } catch (err) {
-                  console.error("[VideoCall] ✗ Error adding ICE candidate:", err);
+                  console.error('[VideoCall] ✗ Error adding ICE candidate:', err);
                 }
               } else {
-                console.warn('[VideoCall] ⚠ Queueing ICE candidate (no remote description)');
+                console.log('[VideoCall] ⚠ Queuing ICE candidate (no remote description)');
                 iceCandidatesQueue.current.push(message.candidate);
               }
             } else if (message.type === "end-call") {
-              console.log('[VideoCall] Received end-call signal from peer');
-              toast.info("Звонок завершен собеседником");
-              // Вызываем cleanup напрямую, без отправки end-call обратно
+              console.log('[VideoCall] 📨 Received end-call signal');
+              toast.info("Собеседник завершил звонок");
               cleanup();
               onClose();
             } else if (message.type === "transition-to-group") {
-              console.log('[VideoCall] Received transition-to-group signal from peer:', message);
+              console.log('[VideoCall] 📨 Received transition-to-group signal:', message);
               
-              // Другой участник инициировал переход к групповому звонку
-              const { roomId } = message;
-
-              // Если инициатор передал полный список участников — используем его (избегаем гонок и лишних запросов)
-              const participantsFromMessage = Array.isArray(message.participants)
-                ? (message.participants as Array<{ userId: string; userName: string }> )
-                : null;
-
-              let participants: Array<{ userId: string; userName: string }> = [];
-
-              if (participantsFromMessage) {
-                const map = new Map<string, { userId: string; userName: string }>();
-                for (const p of participantsFromMessage) {
-                  if (p?.userId) map.set(p.userId, { userId: p.userId, userName: p.userName || "Участник" });
-                }
-                participants = [...map.values()];
+              const { roomId, initiatorId, initiatorName, newParticipantId, newParticipantName, participants: msgParticipants } = message;
+              
+              let participants: Array<{ userId: string; userName: string }>;
+              if (Array.isArray(msgParticipants) && msgParticipants.length) {
+                participants = msgParticipants;
               } else {
-                const { initiatorId, initiatorName, newParticipantId, newParticipantName } = message;
-
-                // Получаем имя текущего пользователя
-                const { data: currentProfile } = await supabase
-                  .from("profiles")
-                  .select("full_name, username")
-                  .eq("id", currentUserId)
-                  .single();
-
-                const currentUserName = currentProfile?.full_name || currentProfile?.username || "Вы";
-
                 participants = [
-                  { userId: currentUserId, userName: currentUserName },
+                  { userId: currentUserId, userName: otherUserName || "Вы" },
                   { userId: initiatorId, userName: initiatorName },
                   { userId: newParticipantId, userName: newParticipantName },
                 ];
               }
 
-              // Завершаем текущий парный звонок
               cleanup();
 
-              // Переходим к групповому звонку
               if (onTransitionToGroupCall) {
                 console.log('[VideoCall] Transitioning to group call as recipient:', participants);
                 toast.info("Переход к групповому звонку");
@@ -962,7 +947,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
 
     try {
       if (isScreenSharing) {
-        // Останавливаем треки демонстрации экрана
         if (screenStreamRef.current) {
           console.log('[VideoCall] Stopping screen share tracks');
           screenStreamRef.current.getTracks().forEach(track => {
@@ -972,7 +956,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
           screenStreamRef.current = null;
         }
         
-        // Возвращаемся к камере
         if (originalStreamRef.current) {
           const videoTrack = originalStreamRef.current.getVideoTracks()[0];
           const sender = peerConnection.getSenders().find(s => s.track?.kind === 'video');
@@ -989,7 +972,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
         setIsScreenSharing(false);
         toast.success("Демонстрация экрана остановлена");
       } else {
-        // Начинаем демонстрацию экрана
         const screenStream = await navigator.mediaDevices.getDisplayMedia({
           video: { 
             width: { ideal: 1920 },
@@ -998,7 +980,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
           }
         });
 
-        // Сохраняем ссылку на стрим демонстрации экрана
         screenStreamRef.current = screenStream;
 
         const screenTrack = screenStream.getVideoTracks()[0];
@@ -1012,14 +993,11 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
             localVideoRef.current.srcObject = screenStream;
           }
 
-          // Обработка окончания демонстрации экрана (когда пользователь нажимает "Прекратить демонстрацию" в браузере)
           screenTrack.onended = () => {
             console.log('[VideoCall] Screen share ended by user');
-            // Очищаем ссылку, чтобы избежать повторного вызова stop
             screenStreamRef.current = null;
             setIsScreenSharing(false);
             
-            // Возвращаемся к камере
             if (originalStreamRef.current && peerConnectionRef.current) {
               const videoTrack = originalStreamRef.current.getVideoTracks()[0];
               const sender = peerConnectionRef.current.getSenders().find(s => s.track?.kind === 'video');
@@ -1093,7 +1071,7 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
           }
           if (report.type === 'candidate-pair' && report.state === 'succeeded') {
             if (report.currentRoundTripTime !== undefined) {
-              currentRoundTripTime = report.currentRoundTripTime * 1000; // convert to ms
+              currentRoundTripTime = report.currentRoundTripTime * 1000;
             }
           }
         });
@@ -1111,14 +1089,13 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
 
         setConnectionQuality(quality);
 
-        // Предупреждение при плохом качестве
         if (quality.videoQuality === 'poor' || quality.audioQuality === 'poor') {
           toast.warning("Плохое качество связи");
         }
       } catch (error) {
         console.error("Error getting stats:", error);
       }
-    }, 3000); // Обновляем каждые 3 секунды
+    }, 3000);
   };
 
   const handleEndCall = async () => {
@@ -1131,14 +1108,11 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
       ts: new Date().toISOString(),
       pc: peerConnectionRef.current?.iceConnectionState,
     });
-    console.log('[VideoCall] handleEndCall stack:', new Error().stack);
 
-    // Обновляем статус звонка
     if (isInitiator) {
       const finalStatus = callStatus === "connected" ? "completed" : "no-answer";
       updateCallStatus(currentUserId, otherUserId, callStartTime, finalStatus, callDuration);
       
-      // Если звонок не был принят, отправляем уведомление о завершении на глобальный канал
       if (callStatus === "connecting") {
         try {
           const callEndChannel = supabase.channel(`global-call-notifications-${otherUserId}`);
@@ -1156,7 +1130,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
       }
     }
 
-    // Используем синхронную функцию с keepalive для Safari
     sendEndCallSignal();
 
     cleanup();
@@ -1167,7 +1140,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
     try {
       console.log('[VideoCall] Transitioning to group call with new participant:', contactId);
       
-      // Получаем имя текущего пользователя
       const { data: currentProfile } = await supabase
         .from("profiles")
         .select("full_name, username")
@@ -1176,7 +1148,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
       
       const currentUserName = currentProfile?.full_name || currentProfile?.username || "Вы";
       
-      // Получаем имя нового участника
       const { data: newParticipantProfile } = await supabase
         .from("profiles")
         .select("full_name, username")
@@ -1185,7 +1156,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
       
       const newParticipantName = newParticipantProfile?.full_name || newParticipantProfile?.username || "Участник";
       
-      // Используем chatId как roomId для группового звонка
       const roomId = chatId;
 
       const participants = [
@@ -1194,7 +1164,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
         { userId: contactId, userName: newParticipantName },
       ];
       
-      // 1. Сначала отправляем сигнал текущему собеседнику о переходе в групповой звонок
       console.log('[VideoCall] Sending transition-to-group signal to current peer:', otherUserId);
       await sendSignalingMessage({
         type: "transition-to-group",
@@ -1207,7 +1176,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
         participants,
       });
 
-      // 2. Отправляем приглашение новому участнику (передаем полный список участников, чтобы избежать гонок)
       const inviteChannel = supabase.channel(`global-call-notifications-${contactId}`);
 
       await new Promise<void>((resolve, reject) => {
@@ -1245,10 +1213,8 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
         supabase.removeChannel(inviteChannel);
       }, 2000);
 
-      // 3. Завершаем текущий парный звонок и переходим к групповому
       cleanup();
 
-      // 4. Переход к групповому звонку через callback
       if (onTransitionToGroupCall) {
         console.log('[VideoCall] Calling onTransitionToGroupCall with participants:', participants);
         onTransitionToGroupCall(roomId, participants);
@@ -1269,10 +1235,8 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
       disconnectTimeoutRef.current = null;
     }
     
-    // Отмечаем звонок как неактивный
     isCallActiveRef.current = false;
 
-    // Stop screen share stream first
     if (screenStreamRef.current) {
       screenStreamRef.current.getTracks().forEach((track) => {
         track.stop();
@@ -1282,7 +1246,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
     }
     setIsScreenSharing(false);
     
-    // Stop local tracks using ref (more reliable than state)
     const streamToClean = localStreamRef.current || localStream;
     if (streamToClean) {
       streamToClean.getTracks().forEach((track) => {
@@ -1292,7 +1255,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
       localStreamRef.current = null;
     }
     
-    // Stop original stream if exists (for screen sharing)
     if (originalStreamRef.current) {
       originalStreamRef.current.getTracks().forEach((track) => {
         track.stop();
@@ -1301,7 +1263,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
       originalStreamRef.current = null;
     }
     
-    // Stop remote tracks using ref
     const remoteToClean = remoteStreamRef.current || remoteStream;
     if (remoteToClean) {
       remoteToClean.getTracks().forEach((track) => {
@@ -1311,7 +1272,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
       remoteStreamRef.current = null;
     }
     
-    // Clear video elements srcObject
     if (localVideoRef.current) {
       localVideoRef.current.srcObject = null;
     }
@@ -1319,7 +1279,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
       remoteVideoRef.current.srcObject = null;
     }
     
-    // Close peer connection using ref
     const pcToClose = peerConnectionRef.current || peerConnection;
     if (pcToClose) {
       pcToClose.close();
@@ -1327,14 +1286,12 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
       peerConnectionRef.current = null;
     }
     
-    // Remove Supabase channel
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current);
       channelRef.current = null;
       console.log('[VideoCall] Signaling channel removed');
     }
     
-    // Clear timers
     if (callTimerRef.current) {
       clearInterval(callTimerRef.current);
       callTimerRef.current = null;
@@ -1348,7 +1305,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
       statsIntervalRef.current = null;
     }
     
-    // Clear queues and refs
     iceCandidatesQueue.current = [];
     reconnectAttempts.current = 0;
     
@@ -1360,11 +1316,10 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
     console.log('[VideoCall] Cleanup complete');
   };
 
-  // Минимизированное представление - используем CSS visibility чтобы не пересоздавать DOM
+  // Минимизированное представление
   if (isMinimized) {
     return (
       <>
-        {/* Скрытое локальное видео для сохранения потока */}
         <div className="hidden">
           <video
             ref={localVideoRef}
@@ -1391,7 +1346,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
               </Button>
             </div>
             
-            {/* Видео собеседника в миниатюре */}
             <div className="relative aspect-video bg-secondary rounded overflow-hidden mb-2">
               <video
                 ref={remoteVideoRef}
@@ -1444,7 +1398,7 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
     <>
     <Dialog open={isOpen && !showInviteDialog} onOpenChange={() => {}}>
       <DialogContent 
-        className="max-w-4xl"
+        className="max-w-4xl h-[85vh] p-0"
         onCloseClick={handleEndCall}
         onInteractOutside={(e) => {
           e.preventDefault();
@@ -1459,9 +1413,9 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
           }
         }}
       >
-        <DialogHeader>
+        <DialogHeader className="p-4 pb-2">
           <DialogTitle className="flex items-center justify-between pr-8">
-            <span>Видеозвонок</span>
+            <span>Видеозвонок с {otherUserName || "собеседником"}</span>
             <div className="flex items-center gap-2">
               <span className="text-sm font-normal text-muted-foreground">
                 {callStatus === "connecting" && "Соединение..."}
@@ -1479,10 +1433,10 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Удаленное видео */}
-            <div className="relative aspect-video bg-secondary rounded-lg overflow-hidden">
+        <div className="flex flex-col flex-1 px-4 pb-4">
+          {/* Основной контейнер видео - удаленное видео на весь экран */}
+          <div className="relative flex-1 bg-secondary rounded-lg overflow-hidden">
+            {/* Удаленное видео - полноэкранное */}
             <video
               ref={remoteVideoRef}
               autoPlay
@@ -1490,15 +1444,29 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
               muted={false}
               className="w-full h-full object-cover"
             />
-              {!remoteStream && (
-                <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
-                  Ожидание подключения...
+            {!remoteStream && (
+              <div className="absolute inset-0 flex items-center justify-center text-muted-foreground bg-secondary">
+                <div className="text-center">
+                  <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
+                    <VideoIcon className="w-10 h-10 text-muted-foreground" />
+                  </div>
+                  <p className="text-lg">Ожидание подключения...</p>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
 
-            {/* Локальное видео */}
-            <div className="relative aspect-video bg-secondary rounded-lg overflow-hidden">
+            {/* Локальное видео - маленькое перетаскиваемое окно PiP */}
+            <div
+              ref={pipContainerRef}
+              className={`absolute w-32 h-24 md:w-48 md:h-36 bg-secondary rounded-lg overflow-hidden shadow-lg border-2 border-background cursor-move ${isDragging ? 'opacity-80' : ''}`}
+              style={{
+                left: `${pipPosition.x}px`,
+                top: `${pipPosition.y}px`,
+                touchAction: 'none',
+              }}
+              onMouseDown={handleDragStart}
+              onTouchStart={handleDragStart}
+            >
               <video
                 ref={localVideoRef}
                 autoPlay
@@ -1506,40 +1474,33 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
                 muted={true}
                 className="w-full h-full object-cover"
               />
-              <div className="absolute bottom-2 left-2 text-xs text-white bg-black/50 px-2 py-1 rounded">
+              <div className="absolute bottom-1 left-1 text-xs text-white bg-black/50 px-1.5 py-0.5 rounded flex items-center gap-1">
+                <Move className="w-3 h-3" />
                 Вы
               </div>
+              {isVideoOff && (
+                <div className="absolute inset-0 bg-secondary flex items-center justify-center">
+                  <VideoOff className="w-8 h-8 text-muted-foreground" />
+                </div>
+              )}
             </div>
+
+            {/* Индикаторы качества связи - поверх видео */}
+            {callStatus === "connected" && (
+              <div className="absolute top-2 left-2 flex gap-2 text-xs text-white bg-black/50 px-2 py-1 rounded">
+                <div className="flex items-center gap-1">
+                  <span className={`w-2 h-2 rounded-full ${
+                    connectionQuality.videoQuality === 'good' ? 'bg-green-500' :
+                    connectionQuality.videoQuality === 'fair' ? 'bg-yellow-500' : 'bg-red-500'
+                  }`} />
+                  <span>{connectionQuality.ping}мс</span>
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Индикаторы качества связи */}
-          {callStatus === "connected" && (
-            <div className="flex justify-center gap-4 text-xs text-muted-foreground mb-2">
-              <div className="flex items-center gap-1">
-                <span>Пинг: {connectionQuality.ping}мс</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <span>Потери: {connectionQuality.packetLoss}%</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <span className={`w-2 h-2 rounded-full ${
-                  connectionQuality.videoQuality === 'good' ? 'bg-green-500' :
-                  connectionQuality.videoQuality === 'fair' ? 'bg-yellow-500' : 'bg-red-500'
-                }`} />
-                <span>Видео</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <span className={`w-2 h-2 rounded-full ${
-                  connectionQuality.audioQuality === 'good' ? 'bg-green-500' :
-                  connectionQuality.audioQuality === 'fair' ? 'bg-yellow-500' : 'bg-red-500'
-                }`} />
-                <span>Аудио</span>
-              </div>
-            </div>
-          )}
-
           {/* Элементы управления */}
-          <div className="flex justify-center gap-4">
+          <div className="flex justify-center gap-4 mt-4">
             <Button
               variant={isMuted ? "destructive" : "secondary"}
               size="icon"
