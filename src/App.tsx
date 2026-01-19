@@ -19,34 +19,39 @@ import IntegrationsPage from "./pages/IntegrationsPage";
 import Travel from "./pages/Travel";
 import Help from "./pages/Help";
 import VirtualEnvironment from "./pages/VirtualEnvironment";
+import { CallProvider } from "./contexts/CallContext";
+import GlobalCallManager from "./components/GlobalCallManager";
 
 const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/auth" element={<Auth />} />
-          <Route path="/messenger" element={<Messenger />} />
-          <Route path="/profile" element={<Profile />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="/social-network" element={<SocialNetwork />} />
-          <Route path="/user/:userId" element={<UserProfile />} />
-          <Route path="/business-environment" element={<BusinessEnvironment />} />
-          <Route path="/document-management" element={<DocumentManagement />} />
-          <Route path="/wallet" element={<Wallet />} />
-          <Route path="/digital-id" element={<DigitalID />} />
-          <Route path="/integrations" element={<IntegrationsPage />} />
-          <Route path="/travel" element={<Travel />} />
-          <Route path="/help" element={<Help />} />
-          <Route path="/virtual-environment" element={<VirtualEnvironment />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
+      <CallProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<Index />} />
+            <Route path="/auth" element={<Auth />} />
+            <Route path="/messenger" element={<Messenger />} />
+            <Route path="/profile" element={<Profile />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="/social-network" element={<SocialNetwork />} />
+            <Route path="/user/:userId" element={<UserProfile />} />
+            <Route path="/business-environment" element={<BusinessEnvironment />} />
+            <Route path="/document-management" element={<DocumentManagement />} />
+            <Route path="/wallet" element={<Wallet />} />
+            <Route path="/digital-id" element={<DigitalID />} />
+            <Route path="/integrations" element={<IntegrationsPage />} />
+            <Route path="/travel" element={<Travel />} />
+            <Route path="/help" element={<Help />} />
+            <Route path="/virtual-environment" element={<VirtualEnvironment />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+          <GlobalCallManager />
+        </BrowserRouter>
+      </CallProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );

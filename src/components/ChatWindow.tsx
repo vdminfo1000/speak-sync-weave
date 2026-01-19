@@ -1127,7 +1127,7 @@ const ChatWindow = ({ chatId, onBack, onStartCall }: ChatWindowProps) => {
                           : "bg-secondary text-secondary-foreground"
                       } ${isDeleted ? "opacity-60 italic" : ""}`}
                     >
-                      <p className="text-sm">{message.content}</p>
+                      <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
                       {message.file_url && !isDeleted && (
                         <MessageAttachment
                           fileUrl={message.file_url}

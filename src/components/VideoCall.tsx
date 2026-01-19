@@ -1316,6 +1316,68 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
     console.log('[VideoCall] Cleanup complete');
   };
 
+  // Minimized widget position and drag state
+  const [minimizedPosition, setMinimizedPosition] = useState({ x: window.innerWidth - 280, y: window.innerHeight - 280 });
+  const [isMinimizedDragging, setIsMinimizedDragging] = useState(false);
+  const minimizedDragStartRef = useRef({ x: 0, y: 0, widgetX: 0, widgetY: 0 });
+  const minimizedWidgetRef = useRef<HTMLDivElement>(null);
+
+  const handleMinimizedDragStart = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    setIsMinimizedDragging(true);
+    
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    
+    minimizedDragStartRef.current = {
+      x: clientX,
+      y: clientY,
+      widgetX: minimizedPosition.x,
+      widgetY: minimizedPosition.y
+    };
+  }, [minimizedPosition]);
+
+  const handleMinimizedDragMove = useCallback((e: MouseEvent | TouchEvent) => {
+    if (!isMinimizedDragging) return;
+    
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    
+    const deltaX = clientX - minimizedDragStartRef.current.x;
+    const deltaY = clientY - minimizedDragStartRef.current.y;
+    
+    const widgetWidth = 256;
+    const widgetHeight = 220;
+    
+    const maxX = window.innerWidth - widgetWidth - 16;
+    const maxY = window.innerHeight - widgetHeight - 16;
+    
+    const newX = Math.max(16, Math.min(maxX, minimizedDragStartRef.current.widgetX + deltaX));
+    const newY = Math.max(16, Math.min(maxY, minimizedDragStartRef.current.widgetY + deltaY));
+    
+    setMinimizedPosition({ x: newX, y: newY });
+  }, [isMinimizedDragging]);
+
+  const handleMinimizedDragEnd = useCallback(() => {
+    setIsMinimizedDragging(false);
+  }, []);
+
+  useEffect(() => {
+    if (isMinimizedDragging) {
+      document.addEventListener('mousemove', handleMinimizedDragMove);
+      document.addEventListener('mouseup', handleMinimizedDragEnd);
+      document.addEventListener('touchmove', handleMinimizedDragMove);
+      document.addEventListener('touchend', handleMinimizedDragEnd);
+      
+      return () => {
+        document.removeEventListener('mousemove', handleMinimizedDragMove);
+        document.removeEventListener('mouseup', handleMinimizedDragEnd);
+        document.removeEventListener('touchmove', handleMinimizedDragMove);
+        document.removeEventListener('touchend', handleMinimizedDragEnd);
+      };
+    }
+  }, [isMinimizedDragging, handleMinimizedDragMove, handleMinimizedDragEnd]);
+
   // Минимизированное представление
   if (isMinimized) {
     return (
@@ -1329,24 +1391,37 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
           />
         </div>
         
-        <div className="fixed bottom-4 right-4 z-50">
-          <div className="bg-card border border-border rounded-lg shadow-lg p-3 w-64">
+        <div 
+          ref={minimizedWidgetRef}
+          className={`fixed z-50 cursor-move ${isMinimizedDragging ? 'opacity-90' : ''}`}
+          style={{
+            left: `${minimizedPosition.x}px`,
+            top: `${minimizedPosition.y}px`,
+            touchAction: 'none'
+          }}
+        >
+          <div 
+            className="bg-card border border-border rounded-lg shadow-lg p-3 w-64"
+            onMouseDown={handleMinimizedDragStart}
+            onTouchStart={handleMinimizedDragStart}
+          >
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
+                <Move className="w-3 h-3 text-muted-foreground" />
                 <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
                 <span className="text-sm font-medium">Видеозвонок</span>
               </div>
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => setIsMinimized(false)}
+                onClick={(e) => { e.stopPropagation(); setIsMinimized(false); }}
                 className="h-6 w-6"
               >
                 <Maximize2 className="w-4 h-4" />
               </Button>
             </div>
             
-            <div className="relative aspect-video bg-secondary rounded overflow-hidden mb-2">
+            <div className="relative aspect-video bg-secondary rounded overflow-hidden mb-2" onClick={(e) => e.stopPropagation()}>
               <video
                 ref={remoteVideoRef}
                 autoPlay
@@ -1360,7 +1435,7 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
               {callStatus === "connected" && formatCallDuration(callDuration)}
             </div>
             
-            <div className="flex justify-center gap-2">
+            <div className="flex justify-center gap-2" onClick={(e) => e.stopPropagation()}>
               <Button
                 variant={isMuted ? "destructive" : "secondary"}
                 size="icon"
