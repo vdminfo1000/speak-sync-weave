@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Phone, PhoneOff, Mic, MicOff, Minimize2, Maximize2, UserPlus } from "lucide-react";
+import { Phone, PhoneOff, Mic, MicOff, Minimize2, Maximize2, UserPlus, Move } from "lucide-react";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import InviteToGroupCallDialog from "./InviteToGroupCallDialog";
@@ -1144,26 +1144,101 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
     console.log('[AudioCall] Cleanup complete');
   };
 
+  // Minimized widget position and drag state
+  const [minimizedPosition, setMinimizedPosition] = useState({ x: window.innerWidth - 280, y: window.innerHeight - 220 });
+  const [isMinimizedDragging, setIsMinimizedDragging] = useState(false);
+  const minimizedDragStartRef = useRef({ x: 0, y: 0, widgetX: 0, widgetY: 0 });
+  const minimizedWidgetRef = useRef<HTMLDivElement>(null);
+
+  const handleMinimizedDragStart = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    setIsMinimizedDragging(true);
+    
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    
+    minimizedDragStartRef.current = {
+      x: clientX,
+      y: clientY,
+      widgetX: minimizedPosition.x,
+      widgetY: minimizedPosition.y
+    };
+  }, [minimizedPosition]);
+
+  const handleMinimizedDragMove = useCallback((e: MouseEvent | TouchEvent) => {
+    if (!isMinimizedDragging) return;
+    
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    
+    const deltaX = clientX - minimizedDragStartRef.current.x;
+    const deltaY = clientY - minimizedDragStartRef.current.y;
+    
+    const widgetWidth = 256;
+    const widgetHeight = 180;
+    
+    const maxX = window.innerWidth - widgetWidth - 16;
+    const maxY = window.innerHeight - widgetHeight - 16;
+    
+    const newX = Math.max(16, Math.min(maxX, minimizedDragStartRef.current.widgetX + deltaX));
+    const newY = Math.max(16, Math.min(maxY, minimizedDragStartRef.current.widgetY + deltaY));
+    
+    setMinimizedPosition({ x: newX, y: newY });
+  }, [isMinimizedDragging]);
+
+  const handleMinimizedDragEnd = useCallback(() => {
+    setIsMinimizedDragging(false);
+  }, []);
+
+  useEffect(() => {
+    if (isMinimizedDragging) {
+      document.addEventListener('mousemove', handleMinimizedDragMove);
+      document.addEventListener('mouseup', handleMinimizedDragEnd);
+      document.addEventListener('touchmove', handleMinimizedDragMove);
+      document.addEventListener('touchend', handleMinimizedDragEnd);
+      
+      return () => {
+        document.removeEventListener('mousemove', handleMinimizedDragMove);
+        document.removeEventListener('mouseup', handleMinimizedDragEnd);
+        document.removeEventListener('touchmove', handleMinimizedDragMove);
+        document.removeEventListener('touchend', handleMinimizedDragEnd);
+      };
+    }
+  }, [isMinimizedDragging, handleMinimizedDragMove, handleMinimizedDragEnd]);
+
   if (isMinimized) {
     return (
-      <div className="fixed bottom-4 right-4 z-50">
-        <div className="bg-card border border-border rounded-lg shadow-lg p-3 w-64">
+      <div 
+        ref={minimizedWidgetRef}
+        className={`fixed z-50 cursor-move ${isMinimizedDragging ? 'opacity-90' : ''}`}
+        style={{
+          left: `${minimizedPosition.x}px`,
+          top: `${minimizedPosition.y}px`,
+          touchAction: 'none'
+        }}
+      >
+        <div 
+          className="bg-card border border-border rounded-lg shadow-lg p-3 w-64"
+          onMouseDown={handleMinimizedDragStart}
+          onTouchStart={handleMinimizedDragStart}
+        >
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
+              <Move className="w-3 h-3 text-muted-foreground" />
               <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
               <span className="text-sm font-medium">Голосовой звонок</span>
             </div>
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => setIsMinimized(false)}
+              onClick={(e) => { e.stopPropagation(); setIsMinimized(false); }}
               className="h-6 w-6"
             >
               <Maximize2 className="w-4 h-4" />
             </Button>
           </div>
           
-          <div className="flex items-center gap-3 mb-3">
+          <div className="flex items-center gap-3 mb-3" onClick={(e) => e.stopPropagation()}>
             <Avatar className="w-10 h-10">
               <AvatarFallback className="bg-primary/10 text-primary">
                 {otherUserName.charAt(0).toUpperCase()}
@@ -1178,7 +1253,7 @@ const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherU
             </div>
           </div>
           
-          <div className="flex justify-center gap-2">
+          <div className="flex justify-center gap-2" onClick={(e) => e.stopPropagation()}>
             <Button
               variant={isMuted ? "destructive" : "secondary"}
               size="icon"

@@ -16,18 +16,12 @@ import { useMissedCallsCount } from "@/hooks/useMissedCallsCount";
 import { LogOut, Plus, Shield, MessageCircle, Bell, User, Phone, Users, Radio } from "lucide-react";
 import { toast } from "sonner";
 import { getUserFriendlyError } from "@/lib/errorHandler";
-import { requestCallMediaPermission } from "@/lib/callMedia";
-import IncomingCallNotification from "@/components/IncomingCallNotification";
-import VideoCall from "@/components/VideoCall";
-import AudioCall from "@/components/AudioCall";
-import GroupVideoCall from "@/components/GroupVideoCall";
-import GroupAudioCall from "@/components/GroupAudioCall";
 import CallHistory from "@/components/CallHistory";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import PublicChannelsList from "@/components/PublicChannelsList";
 import { useIsMobile } from "@/hooks/use-mobile";
 import AdditionalMenu from "@/components/AdditionalMenu";
-import { useRef } from "react";
+import { useCallContext } from "@/contexts/CallContext";
 
 const Messenger = () => {
   const navigate = useNavigate();
@@ -39,43 +33,11 @@ const Messenger = () => {
   const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
   const [isPublicChannelsOpen, setIsPublicChannelsOpen] = useState(false);
   const [isChatsMenuOpen, setIsChatsMenuOpen] = useState(false);
-  const [isSocialNetworkOpen, setIsSocialNetworkOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [currentUserId, setCurrentUserId] = useState<string>("");
   const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
-  
-  // Global incoming call state
-  const [incomingCall, setIncomingCall] = useState<{
-    chatId: string;
-    callerName: string;
-    callerId: string;
-    callType: "audio" | "video";
-    isGroupCall?: boolean;
-    roomId?: string;
-    participants?: Array<{ userId: string; userName: string }>;
-  } | null>(null);
-  const [activeCall, setActiveCall] = useState<{
-    chatId: string;
-    otherUserId: string;
-    otherUserName: string;
-    callType: "audio" | "video";
-    isInitiator: boolean;
-  } | null>(null);
-  const [activeGroupCall, setActiveGroupCall] = useState<{
-    roomId: string;
-    callType: "audio" | "video";
-    participants: Array<{ userId: string; userName: string }>;
-  } | null>(null);
 
-  // Refs для отслеживания актуального состояния звонков (для callback closures)
-  const incomingCallRef = useRef(incomingCall);
-  const activeCallRef = useRef(activeCall);
-  const activeGroupCallRef = useRef(activeGroupCall);
-  
-  // Синхронизируем refs с состоянием
-  incomingCallRef.current = incomingCall;
-  activeCallRef.current = activeCall;
-  activeGroupCallRef.current = activeGroupCall;
+  // Use global call context
+  const { currentUserId, setCurrentUserId, startCall } = useCallContext();
 
   // Отслеживаем статус пользователя
   useUserPresence(currentUserId || null);
@@ -96,7 +58,6 @@ const Messenger = () => {
         navigate("/auth");
       } else {
         setCurrentUserId(session.user.id);
-        // Обновляем статус на "online" при входе
         updateUserStatus(session.user.id, "online");
       }
     });
@@ -112,7 +73,6 @@ const Messenger = () => {
       }
     );
 
-    // Обновляем статус на "offline" при закрытии страницы
     const handleBeforeUnload = () => {
       if (currentUserId) {
         updateUserStatus(currentUserId, "offline");
@@ -175,229 +135,10 @@ const Messenger = () => {
       )
       .subscribe();
 
-    // Global call notifications listener
-    console.log('[Messenger] Setting up global call notifications channel for:', currentUserId);
-    const callChannel = supabase
-      .channel(`global-call-notifications-${currentUserId}`)
-      .on(
-        "broadcast",
-        { event: "incoming-call" },
-        async (payload: any) => {
-          console.log("[Messenger] Global incoming call received:", payload);
-          
-          // Проверяем, есть ли уже активный звонок (используем refs для актуальных значений)
-          if (activeCallRef.current || activeGroupCallRef.current || incomingCallRef.current) {
-            console.log("[Messenger] Already in a call, ignoring incoming call");
-            
-            // Отправляем сигнал "занято" вызывающему
-            const busyChannel = supabase.channel(`call-notifications-${payload.payload.callerId}`);
-            await busyChannel.subscribe();
-            await busyChannel.send({
-              type: "broadcast",
-              event: "call-busy",
-              payload: { 
-                chatId: payload.payload.chatId,
-                userId: currentUserId 
-              },
-            });
-            await supabase.removeChannel(busyChannel);
-            return;
-          }
-          
-          // Get caller profile
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("full_name, username")
-            .eq("id", payload.payload.callerId)
-            .single();
-
-          const callerName = profile?.full_name || profile?.username || "Unknown";
-          
-          console.log("[Messenger] Setting incoming call state:", {
-            chatId: payload.payload.chatId,
-            callerName,
-            callerId: payload.payload.callerId,
-            callType: payload.payload.callType,
-            isGroupCall: payload.payload.isGroupCall,
-            roomId: payload.payload.roomId,
-            participants: payload.payload.participants,
-          });
-
-          const participants = Array.isArray(payload.payload.participants)
-            ? (payload.payload.participants as Array<{ userId: string; userName: string }>)
-            : undefined;
-
-          setIncomingCall({
-            chatId: payload.payload.chatId,
-            callerName,
-            callerId: payload.payload.callerId,
-            callType: payload.payload.callType,
-            isGroupCall: payload.payload.isGroupCall || false,
-            roomId: payload.payload.roomId,
-            participants,
-          });
-        }
-      )
-      .on(
-        "broadcast",
-        { event: "call-declined" },
-        () => {
-          setIncomingCall(null);
-          toast.info("Звонок отклонен");
-        }
-      )
-      .on(
-        "broadcast",
-        { event: "call-ended" },
-        (payload: any) => {
-          console.log('[Messenger] Received call-ended signal:', payload);
-          // Закрываем уведомление о входящем звонке, если звонок был от того же звонящего
-          if (incomingCallRef.current?.callerId === payload.payload?.callerId) {
-            setIncomingCall(null);
-            toast.info("Звонок завершен");
-          }
-        }
-      )
-      .subscribe((status) => {
-        console.log('[Messenger] Call notifications channel status:', status);
-      });
-
     return () => {
       supabase.removeChannel(requestsChannel);
-      supabase.removeChannel(callChannel);
     };
   }, [currentUserId]);
-
-  const handleAcceptCall = async () => {
-    if (!incomingCall) return;
-
-    // iOS Safari: getUserMedia должен быть вызван в рамках user gesture.
-    // Делаем preflight до любых await.
-    try {
-      await requestCallMediaPermission(incomingCall.callType);
-    } catch (error: any) {
-      console.error("[Messenger] Media permission error:", error);
-      toast.error(getUserFriendlyError(error) || "Разрешите доступ к камере/микрофону");
-      return;
-    }
-    
-    console.log('[Messenger] Accepting call:', incomingCall);
-    
-    // Для групповых звонков
-    if (incomingCall.isGroupCall && incomingCall.roomId) {
-      console.log('[Messenger] Accepting group call invitation');
-      
-      // Получаем имя текущего пользователя
-      const { data: currentProfile } = await supabase
-        .from("profiles")
-        .select("full_name, username")
-        .eq("id", currentUserId)
-        .single();
-      
-      const currentUserName = currentProfile?.full_name || currentProfile?.username || "Вы";
-      
-      // Нормализуем список участников: используем переданный roster (если есть),
-      // но гарантируем, что текущий пользователь присутствует в списке.
-      const roster = incomingCall.participants && incomingCall.participants.length
-        ? incomingCall.participants
-        : [
-            { userId: currentUserId, userName: currentUserName },
-            { userId: incomingCall.callerId, userName: incomingCall.callerName },
-          ];
-
-      const map = new Map<string, { userId: string; userName: string }>();
-      for (const p of roster) {
-        if (!p?.userId) continue;
-        map.set(p.userId, { userId: p.userId, userName: p.userName || "Участник" });
-      }
-      map.set(currentUserId, { userId: currentUserId, userName: currentUserName });
-
-      setActiveGroupCall({
-        roomId: incomingCall.roomId,
-        callType: incomingCall.callType,
-        participants: [...map.values()],
-      });
-      setIncomingCall(null);
-      return;
-    }
-    
-    // Verify chat membership before accepting regular call
-    try {
-      const { data: membership, error } = await supabase
-        .from('chat_members')
-        .select('user_id')
-        .eq('chat_id', incomingCall.chatId)
-        .eq('user_id', currentUserId)
-        .maybeSingle();
-      
-      console.log('[Messenger] Membership check:', { membership, error, chatId: incomingCall.chatId, userId: currentUserId });
-      
-      if (error) {
-        console.error('[Messenger] Error checking membership:', error);
-        toast.error('Ошибка проверки членства в чате');
-        setIncomingCall(null);
-        return;
-      }
-      
-      if (!membership) {
-        console.error('[Messenger] User is not a member of this chat');
-        toast.error('Вы не являетесь участником этого чата');
-        setIncomingCall(null);
-        return;
-      }
-    } catch (err) {
-      console.error('[Messenger] Exception during membership check:', err);
-      toast.error('Не удалось проверить доступ к чату');
-      setIncomingCall(null);
-      return;
-    }
-    
-    setActiveCall({
-      chatId: incomingCall.chatId,
-      otherUserId: incomingCall.callerId,
-      otherUserName: incomingCall.callerName,
-      callType: incomingCall.callType,
-      isInitiator: false,
-    });
-    setIncomingCall(null);
-  };
-
-  const handleDeclineCall = async () => {
-    if (!incomingCall) return;
-    
-    console.log('[Messenger] Declining call:', incomingCall);
-    
-    const channel = supabase.channel(`call-notifications-${incomingCall.callerId}`);
-    await channel.subscribe();
-    await channel.send({
-      type: "broadcast",
-      event: "call-declined",
-      payload: { chatId: incomingCall.chatId },
-    });
-    await supabase.removeChannel(channel);
-    
-    setIncomingCall(null);
-    toast.info("Звонок отклонен");
-  };
-
-  const handleCloseCall = () => {
-    console.log('[Messenger] handleCloseCall: closing activeCall');
-    setActiveCall(null);
-  };
-
-  const handleTransitionToGroupCall = (roomId: string, callType: "audio" | "video", participants: Array<{ userId: string; userName: string }>) => {
-    console.log('[Messenger] handleTransitionToGroupCall:', { roomId, callType, participants });
-    
-    // Закрываем текущий парный звонок
-    setActiveCall(null);
-    
-    // Устанавливаем групповой звонок
-    setActiveGroupCall({
-      roomId,
-      callType,
-      participants,
-    });
-  };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -416,7 +157,6 @@ const Messenger = () => {
         return;
       }
 
-      // Проверяем, существует ли уже чат
       const { data: existingMembers } = await supabase
         .from("chat_members")
         .select("chat_id")
@@ -440,7 +180,6 @@ const Messenger = () => {
         }
       }
 
-      // Проверяем существующий pending запрос
       const { data: existingRequest } = await supabase
         .from("chat_requests")
         .select("id, status")
@@ -454,7 +193,6 @@ const Messenger = () => {
         return;
       }
 
-      // Удаляем старые отклоненные/принятые запросы
       await supabase
         .from("chat_requests")
         .delete()
@@ -462,7 +200,6 @@ const Messenger = () => {
         .eq("receiver_id", targetProfileId)
         .in("status", ["rejected", "accepted"]);
 
-      // Отправляем запрос
       const { error } = await supabase
         .from("chat_requests")
         .insert({
@@ -660,12 +397,7 @@ const Messenger = () => {
           <ChatWindow 
             chatId={selectedChatId}
             onBack={isMobile ? () => setSelectedChatId(null) : undefined}
-            onStartCall={(params) => {
-              setActiveCall({
-                ...params,
-                isInitiator: true,
-              });
-            }}
+            onStartCall={(params) => startCall(params)}
           />
         ) : (
           <div className="flex flex-col items-center justify-center h-full text-center p-8">
@@ -678,30 +410,12 @@ const Messenger = () => {
         )}
       </div>
 
-      {/* Global incoming call notification */}
-      {incomingCall && (
-        <IncomingCallNotification
-          callerName={incomingCall.callerName}
-          callerId={incomingCall.callerId}
-          currentUserId={currentUserId}
-          callType={incomingCall.callType}
-          isGroupCall={incomingCall.isGroupCall}
-          onAccept={handleAcceptCall}
-          onDecline={handleDeclineCall}
-        />
-      )}
-
       {/* Call history dialog */}
       <CallHistory
         isOpen={isCallHistoryOpen}
         onClose={() => setIsCallHistoryOpen(false)}
         currentUserId={currentUserId}
-        onStartCall={(params) => {
-          setActiveCall({
-            ...params,
-            isInitiator: true,
-          });
-        }}
+        onStartCall={(params) => startCall(params)}
       />
 
       {/* Create group dialog */}
@@ -723,58 +437,6 @@ const Messenger = () => {
           setIsPublicChannelsOpen(false);
         }}
       />
-
-      {/* Global active call dialogs */}
-      {activeCall && activeCall.callType === "video" && (
-        <VideoCall
-          isOpen={true}
-          onClose={handleCloseCall}
-          chatId={activeCall.chatId}
-          currentUserId={currentUserId}
-          otherUserId={activeCall.otherUserId}
-          otherUserName={activeCall.otherUserName}
-          isInitiator={activeCall.isInitiator}
-          onTransitionToGroupCall={(roomId, participants) => 
-            handleTransitionToGroupCall(roomId, "video", participants)
-          }
-        />
-      )}
-      
-      {activeCall && activeCall.callType === "audio" && (
-        <AudioCall
-          isOpen={true}
-          onClose={handleCloseCall}
-          chatId={activeCall.chatId}
-          currentUserId={currentUserId}
-          otherUserId={activeCall.otherUserId}
-          otherUserName={activeCall.otherUserName}
-          isInitiator={activeCall.isInitiator}
-          onTransitionToGroupCall={(roomId, participants) => 
-            handleTransitionToGroupCall(roomId, "audio", participants)
-          }
-        />
-      )}
-
-      {/* Group call dialogs */}
-      {activeGroupCall && activeGroupCall.callType === "video" && (
-        <GroupVideoCall
-          isOpen={true}
-          onClose={() => setActiveGroupCall(null)}
-          roomId={activeGroupCall.roomId}
-          currentUserId={currentUserId}
-          initialParticipants={activeGroupCall.participants}
-        />
-      )}
-      
-      {activeGroupCall && activeGroupCall.callType === "audio" && (
-        <GroupAudioCall
-          isOpen={true}
-          onClose={() => setActiveGroupCall(null)}
-          roomId={activeGroupCall.roomId}
-          currentUserId={currentUserId}
-          initialParticipants={activeGroupCall.participants}
-        />
-      )}
     </div>
   );
 };
