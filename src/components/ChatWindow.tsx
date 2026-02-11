@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +14,7 @@ import { getUserFriendlyError } from "@/lib/errorHandler";
 import { requestCallMediaPermission } from "@/lib/callMedia";
 import { isUserOnline, getLastSeenText } from "@/utils/userStatus";
 import FileUpload from "./FileUpload";
+import { linkifyContent } from "@/utils/linkify";
 import MessageActions from "./MessageActions";
 import MessageAttachment from "./MessageAttachment";
 import VoiceRecorder from "./VoiceRecorder";
@@ -99,6 +101,7 @@ interface ChatWindowProps {
 const MESSAGES_PER_PAGE = 10;
 
 const ChatWindow = ({ chatId, onBack, onStartCall }: ChatWindowProps) => {
+  const navigate = useNavigate();
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(true);
@@ -1132,7 +1135,7 @@ const ChatWindow = ({ chatId, onBack, onStartCall }: ChatWindowProps) => {
                           : "bg-secondary text-secondary-foreground"
                       } ${isDeleted ? "opacity-60 italic" : ""}`}
                     >
-                      <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
+                      <p className="text-sm whitespace-pre-wrap break-words">{linkifyContent(message.content, navigate)}</p>
                       {message.file_url && !isDeleted && (
                         <MessageAttachment
                           fileUrl={message.file_url}
