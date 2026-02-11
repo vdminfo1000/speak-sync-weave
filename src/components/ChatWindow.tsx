@@ -164,6 +164,11 @@ const ChatWindow = ({ chatId, onBack, onStartCall }: ChatWindowProps) => {
             }];
           });
 
+          // Auto-scroll to bottom for new messages
+          setTimeout(() => {
+            messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+          }, 50);
+
           // Fetch additional data asynchronously and update
           Promise.all([
             supabase

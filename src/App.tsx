@@ -11,14 +11,13 @@ import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import SocialNetwork from "./pages/SocialNetwork";
 import UserProfile from "./pages/UserProfile";
-import BusinessEnvironment from "./pages/BusinessEnvironment";
 import DocumentManagement from "./pages/DocumentManagement";
 import Wallet from "./pages/Wallet";
 import DigitalID from "./pages/DigitalID";
 import IntegrationsPage from "./pages/IntegrationsPage";
-import Travel from "./pages/Travel";
 import Help from "./pages/Help";
-import VirtualEnvironment from "./pages/VirtualEnvironment";
+import CyberWorld from "./pages/CyberWorld";
+import SearchBrowser from "./pages/SearchBrowser";
 import { CallProvider } from "./contexts/CallContext";
 import GlobalCallManager from "./components/GlobalCallManager";
 
@@ -39,14 +38,14 @@ const App = () => (
             <Route path="/settings" element={<Settings />} />
             <Route path="/social-network" element={<SocialNetwork />} />
             <Route path="/user/:userId" element={<UserProfile />} />
-            <Route path="/business-environment" element={<BusinessEnvironment />} />
             <Route path="/document-management" element={<DocumentManagement />} />
             <Route path="/wallet" element={<Wallet />} />
+            <Route path="/documents" element={<DigitalID />} />
             <Route path="/digital-id" element={<DigitalID />} />
             <Route path="/integrations" element={<IntegrationsPage />} />
-            <Route path="/travel" element={<Travel />} />
             <Route path="/help" element={<Help />} />
-            <Route path="/virtual-environment" element={<VirtualEnvironment />} />
+            <Route path="/cyber-world" element={<CyberWorld />} />
+            <Route path="/search" element={<SearchBrowser />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
           <GlobalCallManager />
