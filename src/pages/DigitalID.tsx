@@ -318,7 +318,7 @@ const DigitalID = () => {
           <Button variant="ghost" size="icon" onClick={() => navigate("/messenger")}>
             <ArrowLeft className="w-5 h-5" />
           </Button>
-          <h1 className="text-xl font-bold">Цифровое ID</h1>
+          <h1 className="text-xl font-bold">Документы</h1>
         </div>
       </div>
 

@@ -84,7 +84,7 @@ const MessageAttachment = ({ fileUrl, fileName, fileSize, fileType }: MessageAtt
   }
 
   return (
-    <div className="mt-2 max-w-xs">
+    <div className="mt-2 max-w-xs overflow-hidden">
       {fileCategory === 'image' && (
         <div className="relative group rounded-lg overflow-hidden shadow-md hover:shadow-lg transition-shadow">
           <img
@@ -110,7 +110,7 @@ const MessageAttachment = ({ fileUrl, fileName, fileSize, fileType }: MessageAtt
           <video
             src={signedUrl}
             controls
-            className="max-h-80 w-full rounded-lg"
+            className="max-h-80 max-w-full w-full rounded-lg object-contain"
           />
           <Button
             size="icon"
