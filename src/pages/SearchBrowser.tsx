@@ -12,6 +12,7 @@ const SearchBrowser = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
+  const [searchInput, setSearchInput] = useState("");
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   // Check for URL parameter from chat links
@@ -153,20 +154,30 @@ const SearchBrowser = () => {
           />
         ) : (
           <div className="flex flex-col items-center justify-center h-full text-center p-8">
-            <Globe className="w-24 h-24 text-muted-foreground mb-6" />
-            <h2 className="text-2xl font-bold mb-2">Поиск</h2>
-            <p className="text-muted-foreground max-w-md mb-6">
-              Введите адрес сайта или поисковый запрос в строку выше
-            </p>
+            <Globe className="w-20 h-20 text-primary mb-4" />
+            <h2 className="text-3xl font-bold mb-1 text-primary">GoodOk</h2>
+            <p className="text-sm text-muted-foreground mb-8">Браузер</p>
+            <form onSubmit={(e) => { e.preventDefault(); navigateToUrl(searchInput); }} className="w-full max-w-lg mb-8">
+              <div className="relative">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                <Input
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  placeholder="Введите адрес сайта или поисковый запрос..."
+                  className="pl-12 pr-4 h-12 text-base rounded-full border-2 border-primary/30 focus-visible:ring-primary"
+                />
+              </div>
+            </form>
             <div className="flex flex-wrap gap-2 justify-center">
-              {["google.com", "youtube.com", "wikipedia.org"].map((site) => (
+              {["google.com", "youtube.com", "wikipedia.org", "github.com"].map((site) => (
                 <Button
                   key={site}
                   variant="outline"
-                  className="gap-2"
+                  size="sm"
+                  className="gap-2 rounded-full"
                   onClick={() => navigateToUrl(site)}
                 >
-                  <ExternalLink className="w-4 h-4" />
+                  <ExternalLink className="w-3 h-3" />
                   {site}
                 </Button>
               ))}
