@@ -17,7 +17,7 @@ export const linkifyContent = (text: string, navigate: (path: string) => void) =
           href={href}
           onClick={(e) => {
             e.preventDefault();
-            navigate(`/search-browser?url=${encodeURIComponent(href)}`);
+            navigate(`/search?url=${encodeURIComponent(href)}`);
           }}
           className="underline font-medium opacity-90 hover:opacity-100 break-all"
         >
